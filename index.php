@@ -6126,7 +6126,8 @@ plt.show()</code></pre>
               $total_count = $count_stmt->fetch()['total'];
               
               // Pagination
-              $items_per_page = 12;
+              // Limit archive view to 5 pastes per page
+              $items_per_page = 5;
               $current_page = isset($_GET['p']) ? max(1, intval($_GET['p'])) : 1;
               $offset = ($current_page - 1) * $items_per_page;
               $total_pages = ceil($total_count / $items_per_page);
