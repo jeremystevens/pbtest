@@ -154,6 +154,13 @@ function human_time_diff($timestamp) {
     return floor($diff / 86400) . ' days ago';
 }
 
+// Build pagination URLs with current filter parameters
+function buildPaginationUrl($page) {
+    $params = $_GET;
+    $params['p'] = $page;
+    return '?' . http_build_query($params);
+}
+
 
 
 try {
@@ -6119,7 +6126,8 @@ plt.show()</code></pre>
               $total_count = $count_stmt->fetch()['total'];
               
               // Pagination
-              $items_per_page = 12;
+              // Limit archive view to 5 pastes per page
+              $items_per_page = 5;
               $current_page = isset($_GET['p']) ? max(1, intval($_GET['p'])) : 1;
               $offset = ($current_page - 1) * $items_per_page;
               $total_pages = ceil($total_count / $items_per_page);
@@ -6368,14 +6376,7 @@ plt.show()</code></pre>
                 <?php endif; ?>
               </div>
 
-              <?php
-              // Helper function to build pagination URLs with current filters
-              function buildPaginationUrl($page) {
-                $params = $_GET;
-                $params['p'] = $page;
-                return '?' . http_build_query($params);
-              }
-              ?>
+
 
               <script>
                 let loadedChildren = new Set();
