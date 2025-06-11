@@ -154,6 +154,13 @@ function human_time_diff($timestamp) {
     return floor($diff / 86400) . ' days ago';
 }
 
+// Build pagination URLs with current filter parameters
+function buildPaginationUrl($page) {
+    $params = $_GET;
+    $params['p'] = $page;
+    return '?' . http_build_query($params);
+}
+
 
 
 try {
@@ -6368,14 +6375,7 @@ plt.show()</code></pre>
                 <?php endif; ?>
               </div>
 
-              <?php
-              // Helper function to build pagination URLs with current filters
-              function buildPaginationUrl($page) {
-                $params = $_GET;
-                $params['p'] = $page;
-                return '?' . http_build_query($params);
-              }
-              ?>
+
 
               <script>
                 let loadedChildren = new Set();
