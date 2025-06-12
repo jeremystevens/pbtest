@@ -1800,7 +1800,9 @@ $theme = $_COOKIE['theme'] ?? 'dark';
         return;
       }
       
-      fetch('?action=latest_pastes')
+        // Always request from index.php so the sidebar updates correctly even when
+        // viewing other pages
+        fetch('/index.php?action=latest_pastes')
         .then(response => {
           if (!response.ok) {
             // Don't throw error for non-critical sidebar updates
@@ -7897,12 +7899,6 @@ plt.show()</code></pre>
         
         if (timeLeft <= 0) {
           element.innerHTML = '<span class="text-red-500 font-bold">EXPIRED</span>';
-          // If viewing an expired paste, redirect to homepage
-          if (window.location.search.includes('id=')) {
-            setTimeout(() => {
-              window.location.href = '/';
-            }, 2000);
-          }
           return;
         }
         
