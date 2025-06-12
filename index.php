@@ -45,7 +45,7 @@ if (isset($_GET['logout'])) {
         ");
         $stmt->execute([$parent_id, time()]);
         $children = $stmt->fetchAll();
-        
+
         header('Content-Type: application/json');
         echo json_encode($children);
         exit;
@@ -64,7 +64,7 @@ if (isset($_GET['logout'])) {
         ");
         $stmt->execute([$paste_id]);
         $threads = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
+
         header('Content-Type: application/json');
         echo json_encode($threads);
         exit;
@@ -82,7 +82,7 @@ if (isset($_GET['logout'])) {
         ");
         $stmt->execute([$thread_id]);
         $posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
+
         header('Content-Type: application/json');
         echo json_encode($posts);
         exit;
@@ -115,7 +115,7 @@ if (isset($_GET['logout'])) {
       if ($category !== 'all') {
         $where .= " AND category = " . $db->quote($category);
       }
-      
+
       $stmt = $db->query("SELECT * FROM paste_templates $where ORDER BY usage_count DESC, name ASC");
       $templates = $stmt->fetchAll(PDO::FETCH_ASSOC);
       header('Content-Type: application/json');
@@ -127,12 +127,12 @@ if (isset($_GET['logout'])) {
       $stmt = $db->prepare("SELECT * FROM paste_templates WHERE id = ? AND (is_public = 1 OR created_by = ?)");
       $stmt->execute([$template_id, $user_id]);
       $template = $stmt->fetch(PDO::FETCH_ASSOC);
-      
+
       if ($template) {
         // Increment usage count
         $db->prepare("UPDATE paste_templates SET usage_count = usage_count + 1 WHERE id = ?")->execute([$template_id]);
       }
-      
+
       header('Content-Type: application/json');
       echo json_encode($template ?: ['error' => 'Template not found']);
       exit;
@@ -151,7 +151,15 @@ function human_time_diff($timestamp) {
     if ($diff < 60) return 'just now';
     if ($diff < 3600) return floor($diff / 60) . ' minutes ago';
     if ($diff < 86400) return floor($diff / 3600) . ' hours ago';
-    return floor($diff / 86400) . ' days ago';
+    
+    $days = floor($diff / 86400);
+    if ($days < 30) return $days . ' days ago';
+    
+    $months = floor($days / 30);
+    if ($months < 12) return $months . ' month' . ($months > 1 ? 's' : '') . ' ago';
+    
+    $years = floor($months / 12);
+    return $years . ' year' . ($years > 1 ? 's' : '') . ' ago';
 }
 
 // Build pagination URLs with current filter parameters
@@ -180,7 +188,7 @@ try {
   // Check if table exists with correct structure
   $stmt = $db->query("SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'");
   $existing_table = $stmt->fetch();
-  
+
   if (!$existing_table || strpos($existing_table['sql'], 'reply_to_message_id') === false) {
     // Drop and recreate with correct schema
     $db->exec("DROP TABLE IF EXISTS messages");
@@ -357,45 +365,45 @@ try {
       header('Location: /?page=login');
       exit;
     }
-    
+
     $target_user_id = $_POST['target_user_id'] ?? '';
     $username_param = $_GET['username'] ?? '';
-    
+
     if ($target_user_id && $target_user_id !== $user_id) {
       try {
         $database = Database::getInstance();
         $database->beginTransaction();
-        
+
         if ($_POST['action'] === 'follow') {
           // Check if already following
           $stmt = $db->prepare("SELECT 1 FROM user_follows WHERE follower_id = ? AND following_id = ?");
           $stmt->execute([$user_id, $target_user_id]);
-          
+
           if (!$stmt->fetch()) {
             // Add follow relationship
             $stmt = $db->prepare("INSERT INTO user_follows (follower_id, following_id) VALUES (?, ?)");
             $stmt->execute([$user_id, $target_user_id]);
-            
+
             // Update counts
             $db->prepare("UPDATE users SET following_count = (SELECT COUNT(*) FROM user_follows WHERE follower_id = ?) WHERE id = ?")->execute([$user_id, $user_id]);
             $db->prepare("UPDATE users SET followers_count = (SELECT COUNT(*) FROM user_follows WHERE following_id = ?) WHERE id = ?")->execute([$target_user_id, $target_user_id]);
-            
+
             $audit_logger->log('user_followed', 'social', $user_id, ['target_user_id' => $target_user_id]);
           }
         } elseif ($_POST['action'] === 'unfollow') {
           // Remove follow relationship
           $stmt = $db->prepare("DELETE FROM user_follows WHERE follower_id = ? AND following_id = ?");
           $stmt->execute([$user_id, $target_user_id]);
-          
+
           // Update counts
           $db->prepare("UPDATE users SET following_count = (SELECT COUNT(*) FROM user_follows WHERE follower_id = ?) WHERE id = ?")->execute([$user_id, $user_id]);
           $db->prepare("UPDATE users SET followers_count = (SELECT COUNT(*) FROM user_follows WHERE following_id = ?) WHERE id = ?")->execute([$target_user_id, $target_user_id]);
-          
+
           $audit_logger->log('user_unfollowed', 'social', $user_id, ['target_user_id' => $target_user_id]);
         }
-        
+
         $database->commit();
-        
+
         // Redirect back to profile
         if ($username_param) {
           header('Location: /?page=profile&username=' . urlencode($username_param));
@@ -413,12 +421,12 @@ try {
     if ($_POST['action'] === 'login') {
       $username = trim($_POST['username'] ?? '');
       $password = $_POST['password'] ?? '';
-      
+
       if (empty($username) || empty($password)) {
         header('Location: /?page=login&error=1');
         exit;
       }
-      
+
       // Check rate limit for login attempts (only for failed attempts tracking)
       $login_limit = $rate_limiter->checkLimit('login_attempts');
       if (!$login_limit['allowed']) {
@@ -428,7 +436,7 @@ try {
         ], 'medium');
         ErrorHandler::show429($login_limit['reset_time']);
       }
-      
+
       // Optimize user lookup with prepared statement
       $stmt = $db->prepare("SELECT id, username, password FROM users WHERE username = ? LIMIT 1");
       $stmt->execute([$username]);
@@ -438,22 +446,22 @@ try {
         // Successful login - set session data
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['username'] = $user['username'];
-        
+
         // Log success asynchronously (don't block the login)
         $audit_logger->log('user_login_success', 'auth', $user['id'], ['username' => $user['username']]);
-        
+
         // Redirect immediately
         header('Location: /');
         exit;
       } else {
         // Failed login - count the attempt and log
         $rate_limiter->hit('login_attempts');
-        
+
         $audit_logger->logSecurityEvent('login_failed', [
           'username' => $username,
           'reason' => $user ? 'invalid_password' : 'user_not_found'
         ], 'medium');
-        
+
         header('Location: /?page=login&error=1');
         exit;
       }
@@ -469,7 +477,7 @@ try {
         header('Location: /?page=signup&error=registration_disabled');
         exit;
       }
-      
+
       // Check rate limit for registration
       $reg_limit = $rate_limiter->checkLimit('registration');
       if (!$reg_limit['allowed']) {
@@ -478,15 +486,15 @@ try {
         ], 'low');
         ErrorHandler::show429($reg_limit['reset_time']);
       }
-      
+
       // Validate email domain if specified
       $email = trim($_POST['email'] ?? '');
       $allowed_domains = SiteSettings::get('allowed_email_domains', '*');
-      
+
       if ($email && $allowed_domains !== '*') {
         $email_domain = strtolower(substr(strrchr($email, '@'), 1));
         $allowed_list = array_map('trim', array_map('strtolower', explode(',', $allowed_domains)));
-        
+
         if (!in_array($email_domain, $allowed_list)) {
           $audit_logger->logSecurityEvent('registration_invalid_domain', [
             'username' => $_POST['username'] ?? 'unknown',
@@ -497,7 +505,7 @@ try {
           exit;
         }
       }
-      
+
       $stmt = $db->prepare("SELECT 1 FROM users WHERE username = ?");
       $stmt->execute([$_POST['username']]);
       if (!$stmt->fetch()) {
@@ -514,12 +522,12 @@ try {
             exit;
           }
         }
-        
+
         $stmt = $db->prepare("INSERT INTO users (id, username, password, email, created_at) VALUES (?, ?, ?, ?, ?)");
         $user_id = uniqid();
         $hashed_password = password_hash($_POST['password'], PASSWORD_DEFAULT);
         $stmt->execute([$user_id, $_POST['username'], $hashed_password, $email, time()]);
-        
+
         // If email verification is required, don't log them in yet
         if (SiteSettings::get('email_verification_required', 0) && $email) {
           $audit_logger->log('user_registration_pending_verification', 'auth', $user_id, [
@@ -531,11 +539,11 @@ try {
         } else {
           $_SESSION['user_id'] = $user_id;
           $_SESSION['username'] = $_POST['username'];
-          
+
           $audit_logger->log('user_registration', 'auth', $user_id, [
             'username' => $_POST['username']
           ]);
-          
+
           header('Location: /');
           exit;
         }
@@ -558,7 +566,7 @@ try {
   $stmt = $db->prepare("SELECT id FROM pastes WHERE title = 'AI Summary Demo - Python Game Engine' LIMIT 1");
   $stmt->execute();
   $demo_paste = $stmt->fetch();
-  
+
   if (!$demo_paste) {
     $demo_content = '#!/usr/bin/env python3
 """
@@ -573,7 +581,7 @@ from typing import Tuple, List
 
 class GameObject:
     """Base class for all game objects"""
-    
+
     def __init__(self, x: float, y: float, width: int, height: int):
         self.x = x
         self.y = y
@@ -582,15 +590,15 @@ class GameObject:
         self.velocity_x = 0.0
         self.velocity_y = 0.0
         self.active = True
-    
+
     def update(self, delta_time: float) -> None:
         """Update object position and state"""
         if not self.active:
             return
-            
+
         self.x += self.velocity_x * delta_time
         self.y += self.velocity_y * delta_time
-    
+
     def render(self, screen: pygame.Surface) -> None:
         """Render the object to screen"""
         if self.active:
@@ -599,18 +607,18 @@ class GameObject:
 
 class Player(GameObject):
     """Player character class"""
-    
+
     def __init__(self, x: float, y: float):
         super().__init__(x, y, 32, 32)
         self.speed = 200.0
         self.health = 100
         self.score = 0
-    
+
     def handle_input(self, keys: pygame.key.ScancodeWrapper) -> None:
         """Handle player input"""
         self.velocity_x = 0
         self.velocity_y = 0
-        
+
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             self.velocity_x = -self.speed
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
@@ -619,7 +627,7 @@ class Player(GameObject):
             self.velocity_y = -self.speed
         if keys[pygame.K_DOWN] or keys[pygame.K_s]:
             self.velocity_y = self.speed
-    
+
     def render(self, screen: pygame.Surface) -> None:
         """Render player with distinct color"""
         if self.active:
@@ -628,22 +636,22 @@ class Player(GameObject):
 
 class GameEngine:
     """Main game engine class"""
-    
+
     def __init__(self, width: int = 800, height: int = 600):
         pygame.init()
         self.width = width
         self.height = height
         self.screen = pygame.display.set_mode((width, height))
         pygame.display.set_caption("2D Game Engine Demo")
-        
+
         self.clock = pygame.time.Clock()
         self.running = True
         self.fps = 60
-        
+
         # Game objects
         self.player = Player(width // 2, height // 2)
         self.game_objects: List[GameObject] = [self.player]
-    
+
     def handle_events(self) -> None:
         """Process game events"""
         for event in pygame.event.get():
@@ -652,42 +660,42 @@ class GameEngine:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
-    
+
     def update(self, delta_time: float) -> None:
         """Update all game objects"""
         keys = pygame.key.get_pressed()
         self.player.handle_input(keys)
-        
+
         for obj in self.game_objects:
             obj.update(delta_time)
-            
+
         # Keep player within screen bounds
         self.player.x = max(0, min(self.player.x, self.width - self.player.width))
         self.player.y = max(0, min(self.player.y, self.height - self.player.height))
-    
+
     def render(self) -> None:
         """Render the game scene"""
         self.screen.fill((20, 20, 40))  # Dark blue background
-        
+
         for obj in self.game_objects:
             obj.render(self.screen)
-        
+
         # Draw UI
         font = pygame.font.Font(None, 36)
         score_text = font.render(f"Score: {self.player.score}", True, (255, 255, 255))
         self.screen.blit(score_text, (10, 10))
-        
+
         pygame.display.flip()
-    
+
     def run(self) -> None:
         """Main game loop"""
         while self.running:
             delta_time = self.clock.tick(self.fps) / 1000.0
-            
+
             self.handle_events()
             self.update(delta_time)
             self.render()
-        
+
         pygame.quit()
         sys.exit()
 
@@ -708,7 +716,7 @@ if __name__ == "__main__":
     $stmt = $db->prepare("INSERT OR IGNORE INTO users (id, username, created_at) VALUES (?, ?, ?)");
     $demo_time = time();
     $stmt->execute(['demo_user_123', 'GameDevDemoUser', $demo_time]);
-    
+
     $stmt = $db->prepare("INSERT INTO pastes (title, content, language, is_public, user_id, created_at, views, tags, current_version, last_modified, expire_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     $far_future = time() + (50 * 365 * 24 * 60 * 60); // 50 years from now - never expires
     $stmt->execute([
@@ -724,7 +732,7 @@ if __name__ == "__main__":
       $demo_time,
       $far_future
     ]);
-    
+
     $demo_paste_id = $db->lastInsertId();
     echo "<!-- Demo paste created with ID: $demo_paste_id - Access at: /?id=$demo_paste_id -->";
   } else {
@@ -739,10 +747,10 @@ if __name__ == "__main__":
         header('Location: /?page=login');
         exit;
       }
-      
+
       $original_paste_id = $_POST['paste_id'] ?? $_POST['original_paste_id'] ?? '';
       $is_fork = !empty($original_paste_id) || isset($_POST['is_fork']);
-      
+
       if ($original_paste_id) {
         // Check rate limit for fork creation (treat as paste creation)
         $fork_limit = $rate_limiter->checkLimit('paste_creation', $user_id ?: $rate_limiter->getClientIP());
@@ -754,41 +762,41 @@ if __name__ == "__main__":
           ], 'low');
           ErrorHandler::show429($fork_limit['reset_time']);
         }
-        
+
         // Get original paste
         $stmt = $db->prepare("SELECT * FROM pastes WHERE id = ?");
         $stmt->execute([$original_paste_id]);
         $original_paste = $stmt->fetch(PDO::FETCH_ASSOC);
-        
+
         if ($original_paste) {
           // Check if user already forked this paste
           $stmt = $db->prepare("SELECT 1 FROM paste_forks WHERE original_paste_id = ? AND forked_by_user_id = ?");
           $stmt->execute([$original_paste_id, $user_id]);
-          
+
           if ($stmt->fetch()) {
             // User already forked this paste
             header('Location: ?id=' . $original_paste_id . '&error=already_forked');
             exit;
           }
-          
+
           // Check if user is trying to fork their own paste
           if ($original_paste['user_id'] === $user_id) {
             header('Location: ?id=' . $original_paste_id . '&error=own_paste');
             exit;
           }
-          
+
           // Use transaction for fork creation
           $database = Database::getInstance();
           $database->beginTransaction();
-          
+
           try {
             // Create new paste (fork)
             $stmt = $db->prepare("INSERT INTO pastes (title, content, language, password, expire_time, is_public, tags, user_id, created_at, burn_after_read, current_version, last_modified, original_paste_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            
+
             // Remove password protection and burn_after_read from forks
             $fork_title = 'Fork of ' . $original_paste['title'];
             $current_time = time();
-            
+
             $stmt->execute([
               $fork_title,
               $original_paste['content'],
@@ -804,28 +812,28 @@ if __name__ == "__main__":
               $current_time,
               $original_paste_id
             ]);
-            
+
             $forked_paste_id = $db->lastInsertId();
-            
+
             // Record the fork relationship
             $stmt = $db->prepare("INSERT INTO paste_forks (original_paste_id, forked_paste_id, forked_by_user_id) VALUES (?, ?, ?)");
             $stmt->execute([$original_paste_id, $forked_paste_id, $user_id]);
-            
+
             // Update fork count on original paste
             $stmt = $db->prepare("UPDATE pastes SET fork_count = fork_count + 1 WHERE id = ?");
             $stmt->execute([$original_paste_id]);
-            
+
             $audit_logger->log('paste_forked', 'paste', $forked_paste_id, [
               'original_paste_id' => $original_paste_id,
               'fork_title' => $fork_title
             ]);
-            
+
             $database->commit();
-            
+
             // Redirect to the new fork
             header('Location: ?id=' . $forked_paste_id . '&forked=1');
             exit;
-            
+
           } catch (Exception $e) {
             $database->rollback();
             error_log("Error creating fork: " . $e->getMessage());
@@ -841,7 +849,7 @@ if __name__ == "__main__":
         exit;
       }
     }
-    
+
     // Load site settings for validation
     // Handle template creation
     if (isset($_POST['action']) && $_POST['action'] === 'save_template') {
@@ -860,7 +868,7 @@ if __name__ == "__main__":
         exit;
       }
     }
-    
+
     // Handle template deletion
     if (isset($_POST['action']) && $_POST['action'] === 'delete_template') {
       if ($user_id) {
@@ -870,7 +878,7 @@ if __name__ == "__main__":
         exit;
       }
     }
-    
+
     // Handle collection creation
     if (isset($_POST['action']) && $_POST['action'] === 'create_collection') {
       if ($user_id) {
@@ -885,7 +893,7 @@ if __name__ == "__main__":
         exit;
       }
     }
-    
+
     // Handle collection editing
     if (isset($_POST['action']) && $_POST['action'] === 'edit_collection') {
       if ($user_id) {
@@ -902,7 +910,7 @@ if __name__ == "__main__":
         exit;
       }
     }
-    
+
     // Handle collection deletion
     if (isset($_POST['action']) && $_POST['action'] === 'delete_collection') {
       if ($user_id) {
@@ -912,7 +920,7 @@ if __name__ == "__main__":
         exit;
       }
     }
-    
+
     // Handle adding paste to collection
     if (isset($_POST['action']) && $_POST['action'] === 'add_to_collection') {
       if ($user_id) {
@@ -922,7 +930,7 @@ if __name__ == "__main__":
         exit;
       }
     }
-    
+
     // Handle removing paste from collection
     if (isset($_POST['action']) && $_POST['action'] === 'remove_from_collection') {
       if ($user_id) {
@@ -932,7 +940,7 @@ if __name__ == "__main__":
         exit;
       }
     }
-    
+
     if (isset($_POST['action']) && $_POST['action'] === 'add_comment') {
       // Check rate limit for comment creation
       $comment_limit = $rate_limiter->checkLimit('comment_creation', $user_id ?: $rate_limiter->getClientIP());
@@ -944,23 +952,23 @@ if __name__ == "__main__":
         ], 'low');
         ErrorHandler::show429($comment_limit['reset_time']);
       }
-      
+
       $stmt = $db->prepare("INSERT INTO comments (paste_id, user_id, content, created_at) VALUES (?, ?, ?, ?)");
       $stmt->execute([$_POST['paste_id'], $user_id ?: null, $_POST['comment'], time()]);
-      
+
       $comment_id = $db->lastInsertId();
-      
+
       $audit_logger->log('comment_created', 'comment', $comment_id, [
         'paste_id' => $_POST['paste_id'],
         'content_length' => strlen($_POST['comment'])
       ]);
-      
+
       // Create notification for paste owner
       if ($user_id) {
         $stmt = $db->prepare("SELECT user_id FROM pastes WHERE id = ?");
         $stmt->execute([$_POST['paste_id']]);
         $paste_owner = $stmt->fetch();
-        
+
         if ($paste_owner && $paste_owner['user_id'] && $paste_owner['user_id'] !== $user_id) {
           $stmt = $db->prepare("INSERT INTO comment_notifications (user_id, paste_id, comment_id, type, message) VALUES (?, ?, ?, 'comment', ?)");
           $stmt->execute([
@@ -971,26 +979,26 @@ if __name__ == "__main__":
           ]);
         }
       }
-      
+
       header('Location: ?id=' . $_POST['paste_id']);
       exit;
     }
-    
+
     // Handle comment replies
     if (isset($_POST['action']) && $_POST['action'] === 'add_reply') {
       $stmt = $db->prepare("INSERT INTO comment_replies (parent_comment_id, paste_id, user_id, content, created_at) VALUES (?, ?, ?, ?, ?)");
       $stmt->execute([$_POST['parent_comment_id'], $_POST['paste_id'], $user_id ?: null, $_POST['reply_content'], time()]);
-      
+
       // Update reply count
       $stmt = $db->prepare("UPDATE comments SET reply_count = (SELECT COUNT(*) FROM comment_replies WHERE parent_comment_id = ?) WHERE id = ?");
       $stmt->execute([$_POST['parent_comment_id'], $_POST['parent_comment_id']]);
-      
+
       // Create notification for comment author
       if ($user_id) {
         $stmt = $db->prepare("SELECT user_id FROM comments WHERE id = ?");
         $stmt->execute([$_POST['parent_comment_id']]);
         $comment_author = $stmt->fetch();
-        
+
         if ($comment_author && $comment_author['user_id'] && $comment_author['user_id'] !== $user_id) {
           $stmt = $db->prepare("INSERT INTO comment_notifications (user_id, paste_id, reply_id, type, message) VALUES (?, ?, ?, 'reply', ?)");
           $stmt->execute([
@@ -1001,11 +1009,11 @@ if __name__ == "__main__":
           ]);
         }
       }
-      
+
       header('Location: ?id=' . $_POST['paste_id'] . '#comment-' . $_POST['parent_comment_id']);
       exit;
     }
-    
+
     // Handle comment reports
     if (isset($_POST['action']) && $_POST['action'] === 'report_comment') {
       $stmt = $db->prepare("INSERT INTO comment_reports (comment_id, reply_id, reporter_user_id, reason, description, created_at) VALUES (?, ?, ?, ?, ?, ?)");
@@ -1017,51 +1025,51 @@ if __name__ == "__main__":
         $_POST['description'] ?: null,
         time()
       ]);
-      
+
       // Flag the comment/reply
       if ($_POST['comment_id']) {
         $stmt = $db->prepare("UPDATE comments SET is_flagged = 1 WHERE id = ?");
         $stmt->execute([$_POST['comment_id']]);
       }
-      
+
       header('Location: ?id=' . $_POST['paste_id'] . '&reported=1');
       exit;
     }
-    
+
     // Handle discussion thread creation
     if (isset($_POST['action']) && $_POST['action'] === 'create_discussion_thread') {
       if (!$user_id) {
         header('Location: ?page=login');
         exit;
       }
-      
+
       $paste_id = $_POST['paste_id'];
       $title = trim($_POST['thread_title']);
       $category = $_POST['thread_category'];
       $content = trim($_POST['first_post_content']);
-      
+
       if (!empty($title) && !empty($content) && in_array($category, ['Q&A', 'Tip', 'Idea', 'Bug', 'General'])) {
         try {
           $database = Database::getInstance();
           $database->beginTransaction();
-          
+
           // Create thread
           $stmt = $db->prepare("INSERT INTO paste_discussion_threads (paste_id, user_id, title, category) VALUES (?, ?, ?, ?)");
           $stmt->execute([$paste_id, $user_id, $title, $category]);
           $thread_id = $db->lastInsertId();
-          
+
           // Create first post
           $stmt = $db->prepare("INSERT INTO paste_discussion_posts (thread_id, user_id, content) VALUES (?, ?, ?)");
           $stmt->execute([$thread_id, $user_id, $content]);
-          
+
           $database->commit();
-          
+
           $audit_logger->log('discussion_thread_created', 'discussion', $thread_id, [
             'paste_id' => $paste_id,
             'title' => $title,
             'category' => $category
           ]);
-          
+
           header('Location: ?id=' . $paste_id . '&thread_created=1');
           exit;
         } catch (Exception $e) {
@@ -1072,79 +1080,79 @@ if __name__ == "__main__":
         }
       }
     }
-    
+
     // Handle discussion post creation
     if (isset($_POST['action']) && $_POST['action'] === 'add_discussion_post') {
       if (!$user_id) {
         header('Location: ?page=login');
         exit;
       }
-      
+
       $thread_id = $_POST['thread_id'];
       $content = trim($_POST['post_content']);
       $paste_id = $_POST['paste_id'];
-      
+
       if (!empty($content)) {
         $stmt = $db->prepare("INSERT INTO paste_discussion_posts (thread_id, user_id, content) VALUES (?, ?, ?)");
         $stmt->execute([$thread_id, $user_id, $content]);
-        
+
         $post_id = $db->lastInsertId();
-        
+
         $audit_logger->log('discussion_post_created', 'discussion', $post_id, [
           'thread_id' => $thread_id,
           'paste_id' => $paste_id
         ]);
       }
-      
+
       header('Location: ?id=' . $paste_id . '&view_thread=' . $thread_id);
       exit;
     }
-    
+
     // Handle discussion post deletion
     if (isset($_POST['action']) && $_POST['action'] === 'delete_discussion_post') {
       if (!$user_id) {
         header('Location: ?page=login');
         exit;
       }
-      
+
       $post_id = $_POST['post_id'];
       $paste_id = $_POST['paste_id'];
       $thread_id = $_POST['thread_id'];
-      
+
       // Check if user owns the post or is admin
       $stmt = $db->prepare("SELECT user_id FROM paste_discussion_posts WHERE id = ?");
       $stmt->execute([$post_id]);
       $post = $stmt->fetch();
-      
+
       if ($post && ($post['user_id'] === $user_id)) {
         $stmt = $db->prepare("UPDATE paste_discussion_posts SET is_deleted = 1 WHERE id = ?");
         $stmt->execute([$post_id]);
-        
+
         $audit_logger->log('discussion_post_deleted', 'discussion', $post_id, [
           'thread_id' => $thread_id,
           'paste_id' => $paste_id
         ]);
       }
-      
+
       header('Location: ?id=' . $paste_id . '&view_thread=' . $thread_id);
       exit;
     }
-    
+
     // Handle comment deletion (moderation)
     if (isset($_POST['action']) && $_POST['action'] === 'delete_comment' && $user_id) {
       $comment_id = $_POST['comment_id'];
       $reply_id = $_POST['reply_id'] ?? null;
-      
+
       if ($reply_id) {
         // Check if user owns the reply or is admin
         $stmt = $db->prepare("SELECT user_id FROM comment_replies WHERE id = ?");
         $stmt->execute([$reply_id]);
         $reply = $stmt->fetch();
-        
+
         if ($reply && ($reply['user_id'] === $user_id)) {
           $stmt = $db->prepare("UPDATE comment_replies SET is_deleted = 1 WHERE id = ?");
           $stmt->execute([$reply_id]);
-          
+
           // Update reply count
           $stmt = $db->prepare("UPDATE comments SET reply_count = (SELECT COUNT(*) FROM comment_replies WHERE parent_comment_id = ? AND is_deleted = 0) WHERE id = ?");
           $stmt->execute([$_POST['parent_comment_id'], $_POST['parent_comment_id']]);
@@ -1154,13 +1162,13 @@ if __name__ == "__main__":
         $stmt = $db->prepare("SELECT user_id FROM comments WHERE id = ?");
         $stmt->execute([$comment_id]);
         $comment = $stmt->fetch();
-        
+
         if ($comment && ($comment['user_id'] === $user_id)) {
           $stmt = $db->prepare("UPDATE comments SET is_deleted = 1 WHERE id = ?");
           $stmt->execute([$comment_id]);
         }
       }
-      
+
       header('Location: ?id=' . $_POST['paste_id']);
       exit;
     }
@@ -1169,7 +1177,7 @@ if __name__ == "__main__":
       $max_paste_size = SiteSettings::get('max_paste_size');
       $daily_limit_free = SiteSettings::get('daily_paste_limit_free');
       $daily_limit_premium = SiteSettings::get('daily_paste_limit_premium');
-      
+
       // Validate paste size if limit is set
       if ($max_paste_size && $max_paste_size > 0) {
         $content_size = strlen($_POST['content']);
@@ -1179,7 +1187,7 @@ if __name__ == "__main__":
             'content_size' => $content_size,
             'max_allowed' => $max_paste_size
           ], 'low');
-          
+
           header('Content-Type: application/json');
           echo json_encode([
             'error' => true,
@@ -1188,20 +1196,20 @@ if __name__ == "__main__":
           exit;
         }
       }
-      
+
       // Check daily paste limit if limits are set
       if ($user_id && ($daily_limit_free > 0 || $daily_limit_premium > 0)) {
         // Check if user is premium (for now assume all users are free)
         $is_premium = false; // TODO: Add premium user detection
         $daily_limit = $is_premium ? $daily_limit_premium : $daily_limit_free;
-        
+
         if ($daily_limit > 0) {
           // Count pastes created today
           $today_start = strtotime('today');
           $stmt = $db->prepare("SELECT COUNT(*) FROM pastes WHERE user_id = ? AND created_at >= ?");
           $stmt->execute([$user_id, $today_start]);
           $today_count = $stmt->fetchColumn();
-          
+
           if ($today_count >= $daily_limit) {
             $audit_logger->logSecurityEvent('daily_paste_limit_exceeded', [
               'user_id' => $user_id,
@@ -1209,7 +1217,7 @@ if __name__ == "__main__":
               'daily_limit' => $daily_limit,
               'is_premium' => $is_premium
             ], 'low');
-            
+
             header('Content-Type: application/json');
             echo json_encode([
               'error' => true,
@@ -1220,7 +1228,7 @@ if __name__ == "__main__":
           }
         }
       }
-      
+
       // Check rate limit for paste creation
       $paste_limit = $rate_limiter->checkLimit('paste_creation', $user_id ?: $rate_limiter->getClientIP());
       if (!$paste_limit['allowed']) {
@@ -1230,11 +1238,11 @@ if __name__ == "__main__":
         ], 'low');
         ErrorHandler::show429($paste_limit['reset_time']);
       }
-      
+
       // Use transaction for paste creation
       $database = Database::getInstance();
       $database->beginTransaction();
-      
+
       try {
         $stmt = $db->prepare(
           "INSERT INTO pastes (title, content, language, password, expire_time, is_public, tags, user_id, created_at, burn_after_read, current_version, last_modified, collection_id, original_paste_id, parent_paste_id) 
@@ -1281,7 +1289,7 @@ if __name__ == "__main__":
       ]);
 
       $paste_id = $db->lastInsertId();
-        
+
         // Handle fork relationship tracking
         if (!empty($original_paste_id)) {
           if ($user_id) {
@@ -1289,12 +1297,12 @@ if __name__ == "__main__":
             $stmt = $db->prepare("INSERT INTO paste_forks (original_paste_id, forked_paste_id, forked_by_user_id) VALUES (?, ?, ?)");
             $stmt->execute([$original_paste_id, $paste_id, $user_id]);
           }
-          
+
           // Update fork count on original paste for both logged-in and anonymous users
           $stmt = $db->prepare("UPDATE pastes SET fork_count = fork_count + 1 WHERE id = ?");
           $stmt->execute([$original_paste_id]);
         }
-        
+
         $audit_logger->log('paste_created', 'paste', $paste_id, [
           'title' => $title,
           'language' => $_POST['language'],
@@ -1311,27 +1319,27 @@ if __name__ == "__main__":
         $related_helper->clearCache($paste_id);
 
         $database->commit();
-        
+
         // Check if this is an AJAX request
         if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
           header('Content-Type: application/json');
           echo json_encode(['success' => true, 'paste_id' => $paste_id]);
           exit;
         }
-        
+
         header('Location: ?id=' . $paste_id);
         exit;
       } catch (Exception $e) {
         $database->rollback();
         error_log("Error creating paste: " . $e->getMessage());
-        
+
         // Check if this is an AJAX request
         if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
           header('Content-Type: application/json');
           echo json_encode(['error' => true, 'message' => 'Database error occurred while creating paste.']);
           exit;
         }
-        
+
         throw $e;
       }
     }
@@ -1476,11 +1484,11 @@ if __name__ == "__main__":
                          WHERE p.id = ?");
     $stmt->execute([$user_id, $_GET['id']]);
     $paste = $stmt->fetch(PDO::FETCH_ASSOC);
-    
+
     // Get auto-blur and auto-delete thresholds
     $auto_blur_threshold = SiteSettings::get('auto_blur_threshold', 3);
     $auto_delete_threshold = SiteSettings::get('auto_delete_threshold', 10);
-    
+
     // Check if paste should be auto-deleted
     if ($paste && $paste['flag_count'] >= $auto_delete_threshold) {
       $paste = null; // Treat as if paste doesn't exist
@@ -1520,16 +1528,16 @@ if __name__ == "__main__":
   }
 
   // List public pastes with search and filtering
-  $where = ["is_public = 1", "(expire_time IS NULL OR expire_time > " . time() . ")"];
+  $where = ["p.is_public = 1", "(p.expire_time IS NULL OR p.expire_time > " . time() . ")"];
   if (isset($_GET['search'])) {
     $search = '%' . $_GET['search'] . '%';
-    $where[] = "(title LIKE ? OR content LIKE ? OR tags LIKE ?)";
+    $where[] = "(p.title LIKE ? OR p.content LIKE ? OR p.tags LIKE ?)";
   }
   if (isset($_GET['language'])) {
-    $where[] = "language = ?";
+    $where[] = "p.language = ?";
   }
 
-  $sql = "SELECT p.*, u.username FROM pastes p LEFT JOIN users u ON p.user_id = u.id WHERE " . implode(" AND ", $where) . " ORDER BY created_at DESC LIMIT 5";
+  $sql = "SELECT p.*, u.username FROM pastes p LEFT JOIN users u ON p.user_id = u.id WHERE " . implode(" AND ", $where) . " ORDER BY p.created_at DESC LIMIT 5";
   $stmt = $db->prepare($sql);
 
   $params = [];
@@ -1546,8 +1554,8 @@ if __name__ == "__main__":
 
   // Handle latest pastes request
   if (isset($_GET['action']) && $_GET['action'] === 'latest_pastes') {
-    $stmt = $db->prepare("SELECT p.*, u.username FROM pastes p LEFT JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT 5");
-    $stmt->execute();
+    $stmt = $db->prepare("SELECT p.*, u.username FROM pastes p LEFT JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 AND (p.expire_time IS NULL OR p.expire_time > ?) ORDER BY p.created_at DESC LIMIT 5");
+    $stmt->execute([time()]);
     $latestPastes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     foreach ($latestPastes as $p) {
@@ -1605,7 +1613,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
     code {
       word-break: break-word;
     }
-    
+
     /* Countdown styling */
     .countdown-timer {
       display: inline-flex;
@@ -1614,43 +1622,43 @@ $theme = $_COOKIE['theme'] ?? 'dark';
       font-family: monospace;
       font-weight: bold;
     }
-    
+
     .countdown-urgent {
       color: #ef4444;
       animation: pulse 1s infinite;
     }
-    
+
     .countdown-warning {
       color: #f59e0b;
     }
-    
+
     .countdown-normal {
       color: #6b7280;
     }
-    
+
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.7; }
     }
-    
+
     /* Discussion-specific styles */
     .discussion-thread:hover {
       transform: translateY(-1px);
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
-    
+
     .discussion-post {
       transition: all 0.2s ease-in-out;
     }
-    
+
     .discussion-post:hover {
       background-color: rgba(147, 51, 234, 0.05);
     }
-    
+
     .dark .discussion-post:hover {
       background-color: rgba(147, 51, 234, 0.1);
     }
-    
+
   </style>
   <script>
     // Countdown timer initialization
@@ -1658,10 +1666,10 @@ $theme = $_COOKIE['theme'] ?? 'dark';
       document.querySelectorAll('[data-expires]').forEach(element => {
         const expiresAt = parseInt(element.getAttribute('data-expires'));
         const timerElement = element.querySelector('.countdown-timer');
-        
+
         if (timerElement && expiresAt) {
           updateCountdown(timerElement, expiresAt);
-          
+
           // Update every minute
           setInterval(() => {
             updateCountdown(timerElement, expiresAt);
@@ -1669,24 +1677,24 @@ $theme = $_COOKIE['theme'] ?? 'dark';
         }
       });
     }
-    
+
     function updateCountdown(element, expiresAt) {
       const now = Math.floor(Date.now() / 1000);
       const timeLeft = expiresAt - now;
-      
+
       if (timeLeft <= 0) {
         element.textContent = 'Expired';
         element.className = 'countdown-timer countdown-urgent';
         return;
       }
-      
+
       const days = Math.floor(timeLeft / 86400);
       const hours = Math.floor((timeLeft % 86400) / 3600);
       const minutes = Math.floor((timeLeft % 3600) / 60);
-      
+
       let timeString = '';
       let className = 'countdown-timer ';
-      
+
       if (days > 0) {
         timeString = `${days}d ${hours}h`;
         className += 'countdown-normal';
@@ -1697,11 +1705,11 @@ $theme = $_COOKIE['theme'] ?? 'dark';
         timeString = `${minutes}m`;
         className += timeLeft < 600 ? 'countdown-urgent' : 'countdown-warning';
       }
-      
+
       element.textContent = timeString;
       element.className = className;
     }
-  
+
     tailwind.config = {
       darkMode: 'class',
       theme: {
@@ -1792,14 +1800,21 @@ $theme = $_COOKIE['theme'] ?? 'dark';
         // Sidebar container doesn't exist on this page, skip update
         return;
       }
-      
+
+      // Check if we're viewing a specific paste - don't update sidebar during paste viewing
+      const pasteId = new URLSearchParams(window.location.search).get('id');
+      if (pasteId) {
+        // Skip updates when viewing a paste to prevent interference
+        return;
+      }
+
       // Check if we're on a page that should have sidebar updates
       const currentPage = new URLSearchParams(window.location.search).get('page');
       if (currentPage && ['login', 'signup', 'profile', 'settings'].includes(currentPage)) {
         // Skip updates on pages that don't need live sidebar
         return;
       }
-      
+
       fetch('?action=latest_pastes')
         .then(response => {
           if (!response.ok) {
@@ -1811,7 +1826,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
         .then(html => {
           if (html && html.trim() && sidebarContainer) {
             sidebarContainer.innerHTML = html;
-            
+
             // Reinitialize countdown timers for the new content
             if (typeof initializeCountdownTimers === 'function') {
               setTimeout(initializeCountdownTimers, 100);
@@ -1831,11 +1846,13 @@ $theme = $_COOKIE['theme'] ?? 'dark';
     document.addEventListener('DOMContentLoaded', function() {
       const sidebarContainer = document.getElementById('latest-pastes');
       const currentPage = new URLSearchParams(window.location.search).get('page');
-      
-      if (sidebarContainer && (!currentPage || !['login', 'signup', 'settings'].includes(currentPage))) {
+      const pasteId = new URLSearchParams(window.location.search).get('id');
+
+      // Don't start live updates when viewing a paste or on specific pages
+      if (sidebarContainer && !pasteId && (!currentPage || !['login', 'signup', 'settings'].includes(currentPage))) {
         // Initial update
         fetchLatestPastes();
-        
+
         // Update every 45 seconds (reduced frequency to be less aggressive)
         setInterval(fetchLatestPastes, 45000);
       }
@@ -1931,17 +1948,17 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   <a href="?page=settings" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                     <i class="fas fa-cog mr-2"></i> Edit Settings
                   </a>
-                  
+
                   <hr class="my-1 border-gray-200 dark:border-gray-700">
-                  
+
                   <!-- Messages Group -->
                   <div class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Messages</div>
                   <a href="threaded_messages.php" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                     <i class="fas fa-envelope mr-2"></i> My Messages
                   </a>
-                  
+
                   <hr class="my-1 border-gray-200 dark:border-gray-700">
-                  
+
                   <!-- Tools Group -->
                   <div class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tools</div>
                   <a href="project_manager.php" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
@@ -1953,9 +1970,9 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   <a href="?page=import-export" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                     <i class="fas fa-exchange-alt mr-2"></i> Import/Export
                   </a>
-                  
+
                   <hr class="my-1 border-gray-200 dark:border-gray-700">
-                  
+
                   <!-- Logout -->
                   <a href="?logout=1" class="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">
                     <i class="fas fa-sign-out-alt mr-2"></i> Logout
@@ -1982,7 +1999,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
           <span class="mr-2">🔥</span> Recent Pastes
         </h2>
       </div>
-      
+
       <div id="latest-pastes" class="divide-y divide-gray-200 dark:divide-gray-700">
         <?php foreach ($pastes as $p): ?>
           <a href="?id=<?= $p['id'] ?>" class="block p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
@@ -2038,7 +2055,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                 <?php 
                 $is_flagged_for_blur = $paste['flag_count'] >= $auto_blur_threshold;
                 ?>
-                
+
                 <?php if ($is_flagged_for_blur): ?>
                   <div class="mb-4 p-4 bg-yellow-100 dark:bg-yellow-900 border-l-4 border-yellow-500 rounded">
                     <div class="flex items-center">
@@ -2053,7 +2070,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     </div>
                   </div>
                 <?php endif; ?>
-                
+
                 <!-- Parent Paste indicator (for paste chains) -->
                 <?php if (!empty($paste['parent_paste_id'])): ?>
                   <?php
@@ -2135,7 +2152,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     </div>
                   <?php endif; ?>
                 <?php endif; ?>
-                
+
                 <!-- Paste Title and Info -->
                 <div class="flex flex-col md:flex-row items-start md:items-center gap-6">
                   <div class="flex-1">
@@ -2147,7 +2164,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       <?php endif; ?>
                       <?= htmlspecialchars($paste['title']) ?>
                     </h1>
-                    
+
                     <div class="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
                       <div class="flex items-center gap-2">
                         <img src="<?= $paste['username'] ? ($paste['profile_image'] ?? 'https://www.gravatar.com/avatar/default?s=20') : 'https://www.gravatar.com/avatar/anonymous?d=mp&s=20' ?>" 
@@ -2191,7 +2208,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                         <?php endif; ?>
                       </span>
                     </div>
-                    
+
                     <!-- Tags -->
                     <?php if (!empty($paste['tags'])): ?>
                       <div class="mb-3">
@@ -2203,7 +2220,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       </div>
                     <?php endif; ?>
                   </div>
-                  
+
                   <!-- Actions -->
                   <div class="flex flex-col items-end gap-2">
                     <?php
@@ -2211,27 +2228,27 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     $stmt = $db->prepare("SELECT COUNT(*) FROM comments WHERE paste_id = ? AND is_deleted = 0");
                     $stmt->execute([$paste['id']]);
                     $comment_count = $stmt->fetchColumn();
-                    
+
                     // Get version count
                     $stmt = $db->prepare("SELECT COUNT(*) FROM paste_versions WHERE paste_id = ?");
                     $stmt->execute([$paste['id']]);
                     $version_count = $stmt->fetchColumn() + 1; // +1 for current version
-                    
+
                     // Get fork count
                     $fork_count = $paste['fork_count'] ?? 0;
-                    
+
                     // Get related pastes count
                     require_once 'related_pastes_helper.php';
                     $related_helper = new RelatedPastesHelper($db);
                     $related_pastes = $related_helper->getRelatedPastes($paste['id'], 5);
                     $related_count = count($related_pastes);
-                    
+
                     // Get chain count (children)
                     $stmt = $db->prepare("SELECT COUNT(*) FROM pastes WHERE parent_paste_id = ? AND is_public = 1");
                     $stmt->execute([$paste['id']]);
                     $chain_count = $stmt->fetchColumn();
                     ?>
-                    
+
                     <!-- Action Buttons Row 1 -->
                     <div class="flex gap-1">
                       <?php if (!$is_flagged_for_blur): ?>
@@ -2248,11 +2265,11 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           <i class="fas fa-clone text-sm"></i>
                         </button>
                       <?php endif; ?>
-                      
+
                       <button onclick="window.location.href='/?parent_id=<?= $paste['id'] ?>'" class="p-2 rounded bg-green-500 text-white hover:bg-green-600 transition-colors" title="Add to Chain">
                         <i class="fas fa-link text-sm"></i>
                       </button>
-                      
+
                       <?php if (!$user_id || ($user_id && $paste['user_id'] !== $user_id)): ?>
                         <?php
                         $already_forked = false;
@@ -2268,12 +2285,16 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           </button>
                         <?php endif; ?>
                       <?php endif; ?>
-                      
+
                       <?php if ($user_id && $paste['user_id'] === $user_id): ?>
                         <button onclick="editPaste(<?= $paste['id'] ?>)" class="p-2 rounded bg-yellow-500 text-white hover:bg-yellow-600 transition-colors" title="Edit">
                           <i class="fas fa-edit text-sm"></i>
                         </button>
                       <?php endif; ?>
+
+                      <button onclick="reportPaste(<?= $paste['id'] ?>)" class="p-2 rounded bg-red-500 text-white hover:bg-red-600 transition-colors" title="Report this paste">
+                        <i class="fas fa-flag text-sm"></i>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -2371,7 +2392,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           $content_bytes = strlen($paste['content']);
                           $size_display = '';
                           $size_class = 'text-indigo-600 dark:text-indigo-400';
-                          
+
                           if ($content_bytes < 1024) {
                             $size_display = $content_bytes . ' B';
                           } elseif ($content_bytes < 1048576) {
@@ -2389,7 +2410,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                         </div>
                       </div>
                     </div>
-                    
+
                     <!-- Code Content -->
                     <div>
                       <div class="flex justify-between items-center mb-4">
@@ -2407,7 +2428,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           <?php endif; ?>
                         </div>
                       </div>
-                      
+
                       <div class="relative overflow-x-auto">
                         <?php if ($is_flagged_for_blur): ?>
                           <!-- Server-side protected content -->
@@ -2441,7 +2462,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   // Check if we're viewing a specific version
                   $viewing_version = isset($_GET['version']) ? (int)$_GET['version'] : null;
                   $is_viewing_old_version = false;
-                  
+
                   if ($viewing_version) {
                     // Fetch specific version
                     $stmt = $db->prepare("SELECT pv.*, u.username FROM paste_versions pv 
@@ -2449,7 +2470,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                                          WHERE pv.paste_id = ? AND pv.version_number = ?");
                     $stmt->execute([$paste['id'], $viewing_version]);
                     $version_data = $stmt->fetch();
-                    
+
                     if ($version_data) {
                       // Replace paste data with version data for display
                       $paste['title'] = $version_data['title'];
@@ -2473,7 +2494,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   // Count total versions (including current)
                   $total_versions = count($versions) + 1;
                   ?>
-                  
+
                   <div class="space-y-4">
                     <div class="flex justify-between items-center">
                       <h3 class="text-lg font-medium">
@@ -2485,7 +2506,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                         </button>
                       <?php endif; ?>
                     </div>
-                    
+
                     <?php if ($is_viewing_old_version): ?>
                       <div class="p-4 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg">
                         <p class="text-yellow-800 dark:text-yellow-200">
@@ -2573,7 +2594,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     <h3 class="text-lg font-medium">
                       <i class="fas fa-lightbulb mr-2 text-yellow-500"></i>Related Pastes
                     </h3>
-                    
+
                     <div class="space-y-3">
                       <?php foreach ($related_pastes as $related): ?>
                         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
@@ -2629,13 +2650,13 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   $stmt->execute([$paste['id']]);
                   $child_pastes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                   ?>
-                  
+
                   <div class="space-y-4">
                     <h3 class="text-lg font-medium">
                       <i class="fas fa-link mr-2 text-blue-500"></i>
                       Chain Continuations (<?= count($child_pastes) ?><?= count($child_pastes) >= 10 ? '+' : '' ?>)
                     </h3>
-                    
+
                     <div class="space-y-4">
                       <?php foreach ($child_pastes as $child): ?>
                         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
@@ -2673,7 +2694,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                               </a>
                             </div>
                           </div>
-                          
+
                           <div class="flex items-center justify-between text-sm text-gray-500">
                             <span><i class="fas fa-eye mr-1"></i><?= number_format($child['views']) ?> views</span>
                             <span><i class="fas fa-star mr-1"></i><?= number_format($child['favorite_count'] ?? 0) ?> likes</span>
@@ -2702,13 +2723,13 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   $stmt->execute([$paste['id']]);
                   $forks = $stmt->fetchAll(PDO::FETCH_ASSOC);
                   ?>
-                  
+
                   <div class="space-y-4">
                     <h3 class="text-lg font-medium">
                       <i class="fas fa-code-branch mr-2 text-purple-500"></i>
                       Forks (<?= count($forks) ?><?= count($forks) >= 10 ? '+' : '' ?>)
                     </h3>
-                    
+
                     <div class="grid md:grid-cols-2 gap-4">
                       <?php foreach ($forks as $fork): ?>
                         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
@@ -2748,7 +2769,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                               <?php endif; ?>
                             </div>
                           </div>
-                          
+
                           <div class="flex items-center justify-between text-sm text-gray-500">
                             <span><i class="fas fa-eye mr-1"></i><?= number_format($fork['views']) ?> views</span>
                             <span><i class="fas fa-star mr-1"></i><?= number_format($fork['favorite_count'] ?? 0) ?> likes</span>
@@ -2781,14 +2802,14 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       <form method="POST" class="space-y-4">
                         <input type="hidden" name="action" value="create_discussion_thread">
                         <input type="hidden" name="paste_id" value="<?= $paste['id'] ?>">
-                        
+
                         <div>
                           <label class="block text-sm font-medium mb-2">Discussion Title</label>
                           <input type="text" name="thread_title" required 
                                  class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" 
                                  placeholder="What would you like to discuss?">
                         </div>
-                        
+
                         <div>
                           <label class="block text-sm font-medium mb-2">Category</label>
                           <select name="thread_category" required class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
@@ -2800,14 +2821,14 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                             <option value="General">General - General discussion</option>
                           </select>
                         </div>
-                        
+
                         <div>
                           <label class="block text-sm font-medium mb-2">Your Message</label>
                           <textarea name="first_post_content" required rows="4" 
                                     class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" 
                                     placeholder="Start the discussion..."></textarea>
                         </div>
-                        
+
                         <div class="flex gap-2">
                           <button type="submit" class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
                             <i class="fas fa-plus mr-1"></i>Create Discussion
@@ -2824,7 +2845,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     <?php if (isset($_GET['view_thread'])): ?>
                       <?php
                       $thread_id = $_GET['view_thread'];
-                      
+
                       // Get thread details
                       $stmt = $db->prepare("
                         SELECT dt.*, u.username, u.profile_image
@@ -2834,7 +2855,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       ");
                       $stmt->execute([$thread_id, $paste['id']]);
                       $thread = $stmt->fetch(PDO::FETCH_ASSOC);
-                      
+
                       if ($thread):
                         // Get posts
                         $stmt = $db->prepare("
@@ -2869,7 +2890,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                                 <?= htmlspecialchars($thread['category']) ?>
                               </span>
                             </div>
-                            
+
                             <h4 class="text-xl font-semibold mb-2"><?= htmlspecialchars($thread['title']) ?></h4>
                             <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                               <img src="<?= $thread['profile_image'] ?? 'https://www.gravatar.com/avatar/'.md5(strtolower($thread['username'] ?? 'anonymous')).'?d=mp&s=24' ?>" 
@@ -2894,7 +2915,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                               <div class="flex items-start gap-4 <?= $index === 0 ? 'bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4' : '' ?>">
                                 <img src="<?= $post['profile_image'] ?? 'https://www.gravatar.com/avatar/'.md5(strtolower($post['username'] ?? 'anonymous')).'?d=mp&s=40' ?>" 
                                      class="w-10 h-10 rounded-full" alt="Author">
-                                
+
                                 <div class="flex-1">
                                   <div class="flex items-center gap-2 mb-2">
                                     <div class="font-medium">
@@ -2919,7 +2940,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                                       </button>
                                     <?php endif; ?>
                                   </div>
-                                  
+
                                   <div class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
                                     <?= nl2br(htmlspecialchars($post['content'])) ?>
                                   </div>
@@ -2935,14 +2956,14 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                                 <input type="hidden" name="action" value="add_discussion_post">
                                 <input type="hidden" name="thread_id" value="<?= $thread_id ?>">
                                 <input type="hidden" name="paste_id" value="<?= $paste['id'] ?>">
-                                
+
                                 <div>
                                   <label class="block text-sm font-medium mb-2">Your Reply</label>
                                   <textarea name="post_content" required rows="3" 
                                             class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" 
                                             placeholder="Write your reply..."></textarea>
                                 </div>
-                                
+
                                 <button type="submit" class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
                                   <i class="fas fa-reply mr-1"></i>Reply
                                 </button>
@@ -3020,7 +3041,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                                         <?= htmlspecialchars($discussion['category']) ?>
                                       </span>
                                     </div>
-                                    
+
                                     <div class="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                                       <div class="flex items-center gap-2">
                                         <img src="<?= $discussion['profile_image'] ?? 'https://www.gravatar.com/avatar/'.md5(strtolower($discussion['username'] ?? 'anonymous')).'?d=mp&s=20' ?>" 
@@ -3060,7 +3081,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     <h3 class="text-lg font-medium">
                       <i class="fas fa-comment mr-2 text-green-500"></i>Comments (<?= $comment_count ?>)
                     </h3>
-                    
+
                     <?php
                     // Fetch comments with reply counts
                     $stmt = $db->prepare("SELECT c.*, u.username, u.profile_image,
@@ -3071,7 +3092,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                                         ORDER BY c.created_at DESC");
                     $stmt->execute([$paste['id']]);
                     $comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                    
+
                     // Function to get replies for a comment
                     function getCommentReplies($db, $comment_id) {
                       $stmt = $db->prepare("SELECT cr.*, u.username, u.profile_image 
@@ -3242,21 +3263,21 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                 document.querySelectorAll('.tab-content').forEach(content => {
                   content.classList.add('hidden');
                 });
-                
+
                 // Remove active state from all tabs
                 document.querySelectorAll('.paste-tab').forEach(tab => {
                   tab.classList.remove('active-paste-tab', 'border-blue-500', 'text-blue-600', 'dark:text-blue-400', 'bg-blue-50', 'dark:bg-blue-900/20');
                   tab.classList.add('border-transparent', 'text-gray-500', 'dark:text-gray-400');
                 });
-                
+
                 // Show selected tab content
                 document.getElementById('paste-content-' + tabName).classList.remove('hidden');
-                
+
                 // Add active state to selected tab
                 const activeTab = document.getElementById('paste-tab-' + tabName);
                 activeTab.classList.add('active-paste-tab', 'border-blue-500', 'text-blue-600', 'dark:text-blue-400', 'bg-blue-50', 'dark:bg-blue-900/20');
                 activeTab.classList.remove('border-transparent', 'text-gray-500', 'dark:text-gray-400');
-                
+
                 // Re-initialize Prism syntax highlighting for the visible content
                 if (window.Prism) {
                   setTimeout(() => {
@@ -3300,13 +3321,13 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   }
                 `;
                 document.head.appendChild(style);
-                
+
                 // Auto-switch to discussions tab if viewing a thread
                 <?php if (isset($_GET['view_thread'])): ?>
                 switchPasteTab('discussions');
                 <?php endif; ?>
               });
-              
+
               // Comment functions
               function toggleReplyForm(commentId) {
                 const form = document.getElementById(`reply-form-${commentId}`);
@@ -3315,12 +3336,12 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   form.querySelector('textarea').focus();
                 }
               }
-              
+
               function toggleReplies(commentId) {
                 const replies = document.getElementById(`replies-${commentId}`);
                 replies.classList.toggle('hidden');
               }
-              
+
               function deleteComment(commentId, replyId, pasteId) {
                 if (confirm('Are you sure you want to delete this comment?')) {
                   const form = document.createElement('form');
@@ -3336,12 +3357,12 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   form.submit();
                 }
               }
-              
+
               function reportComment(commentId, replyId, pasteId) {
                 // Implement comment reporting functionality
                 alert('Comment reporting functionality would be implemented here');
               }
-              
+
               // Discussion functions
               function toggleDiscussionForm() {
                 const form = document.getElementById('discussionForm');
@@ -3352,15 +3373,15 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   }
                 }
               }
-              
+
               function viewThread(threadId) {
                 window.location.href = `?id=<?= $paste['id'] ?>&view_thread=${threadId}`;
               }
-              
+
               function backToDiscussions() {
                 window.location.href = `?id=<?= $paste['id'] ?>`;
               }
-              
+
               function deleteDiscussionPost(postId, threadId, pasteId) {
                 if (confirm('Are you sure you want to delete this post?')) {
                   const form = document.createElement('form');
@@ -3415,7 +3436,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                 text-align: right;
               }
             </style></old_str>
-            
+
 
             <script>
 
@@ -3429,7 +3450,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   });
                   return;
                 <?php endif; ?>
-                
+
                 const codeElement = document.querySelector('pre code');
                 if (!codeElement) {
                   Swal.fire({
@@ -3439,7 +3460,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   });
                   return;
                 }
-                
+
                 const codeContent = codeElement.textContent;
                 const printContent = document.body.innerHTML;
                 document.body.innerHTML = `
@@ -3471,7 +3492,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   sessionStorage.setItem('forkPasteId', pasteId);
                   sessionStorage.setItem('forkLanguage', '<?= htmlspecialchars($paste['language']) ?>');
                   sessionStorage.setItem('forkTitle', '<?= htmlspecialchars($paste['title']) ?>');
-                  
+
                   // Redirect to home page for editing
                   window.location.href = '/?fork=1';
                 })
@@ -3520,7 +3541,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   });
                   return;
                 <?php endif; ?>
-                
+
                 const codeElement = document.querySelector('pre code');
                 if (!codeElement) {
                   Swal.fire({
@@ -3530,7 +3551,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   });
                   return;
                 }
-                
+
                 const content = codeElement.textContent;
                 const language = '<?= htmlspecialchars($paste['language']) ?>';
 
@@ -3551,7 +3572,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   });
                   return;
                 <?php endif; ?>
-                
+
                 try {
                   await navigator.clipboard.writeText(text);
                   Swal.fire({
@@ -3587,9 +3608,9 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     modalBackdrop.id = 'flagModal';
                     modalBackdrop.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
                     modalBackdrop.innerHTML = html;
-                    
+
                     document.body.appendChild(modalBackdrop);
-                    
+
                     // Close modal when clicking backdrop
                     modalBackdrop.addEventListener('click', function(e) {
                       if (e.target === modalBackdrop) {
@@ -3629,9 +3650,9 @@ $theme = $_COOKIE['theme'] ?? 'dark';
 
               function submitFlag(event) {
                 event.preventDefault();
-                
+
                 const formData = new FormData(event.target);
-                
+
                 fetch('flag_paste.php', {
                   method: 'POST',
                   body: formData
@@ -3744,7 +3765,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     <i class="fas fa-times text-xl"></i>
                   </button>
                 </div>
-                
+
                 <div class="p-6 space-y-6">
                   <?php if (!empty($paste_collections)): ?>
                     <div>
@@ -3774,7 +3795,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       return !in_array($collection['id'], $paste_collection_ids);
                     });
                     ?>
-                    
+
                     <?php if (!empty($available_collections)): ?>
                       <div>
                         <h4 class="font-medium mb-3 text-gray-900 dark:text-white">Add to collection:</h4>
@@ -3809,7 +3830,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
             </div>
             <?php endif; ?>
 
-            
+
 
             <!-- Embed Modal -->
             <div id="embedModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -3822,7 +3843,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     <i class="fas fa-times text-xl"></i>
                   </button>
                 </div>
-                
+
                 <div class="p-6 space-y-6">
                   <!-- Live Preview -->
                   <div>
@@ -3905,7 +3926,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
               </div>
             </div>
             <?php endif; ?>
-            
+
           </div>
         <?php else: ?>
           <?php if(isset($_GET['page']) && $_GET['page'] === 'dashboard' && $user_id): ?>
@@ -3933,7 +3954,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
           <?php elseif (isset($_GET['page']) && $_GET['page'] === 'login'): ?>
             <div class="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 animate-fade-in">
               <h2 class="text-2xl font-bold mb-6">Login to PasteForge</h2>
-              
+
               <!-- Error Messages -->
               <?php if (isset($_GET['error'])): ?>
                 <div class="mb-6 p-4 bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-200 rounded">
@@ -3952,21 +3973,21 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   <?php endif; ?>
                 </div>
               <?php endif; ?>
-              
+
               <!-- Success Messages -->
               <?php if (isset($_GET['forked'])): ?>
                 <div class="mb-6 p-4 bg-green-100 dark:bg-green-900 border border-green-400 text-green-700 dark:text-green-200 rounded">
                   <i class="fas fa-code-branch mr-2"></i>Successfully forked! This is your copy of the original paste.
                 </div>
               <?php endif; ?>
-              
+
               <!-- Social Login Options -->
               <?php
               require_once 'social_media_integration.php';
               $social = new SocialMediaIntegration();
               $providers = $social->getEnabledProviders();
               ?>
-              
+
               <?php if (!empty($providers)): ?>
                 <div class="mb-6">
                   <p class="text-center text-gray-600 dark:text-gray-400 mb-4">Sign in with your social account</p>
@@ -3979,7 +4000,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       </a>
                     <?php endforeach; ?>
                   </div>
-                  
+
                   <div class="my-6 flex items-center">
                     <div class="flex-1 border-t border-gray-300 dark:border-gray-600"></div>
                     <span class="px-4 text-sm text-gray-500 dark:text-gray-400">or</span>
@@ -3987,7 +4008,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   </div>
                 </div>
               <?php endif; ?>
-              
+
               <p class="mb-6">Login with your username and password.</p>
               <form method="POST" class="space-y-4" onsubmit="return validateLoginForm(event)">
                 <input type="hidden" name="action" value="login">
@@ -4003,14 +4024,14 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   Login
                 </button>
               </form>
-              
+
               <div class="mt-6 text-center">
                 <p class="text-sm text-gray-600 dark:text-gray-400">
                   Don't have an account? 
                   <a href="?page=signup" class="text-blue-500 hover:text-blue-700">Sign up here</a>
                 </p>
               </div>
-              
+
               <script>
                 function validateLoginForm(event) {
                   event.preventDefault();
@@ -4059,7 +4080,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                 $stmt = $db->prepare("SELECT followers_count, following_count FROM users WHERE id = ?");
                 $stmt->execute([$profile_user['id']]);
                 $follow_counts = $stmt->fetch();
-                
+
                 // Check if current user is following this profile
                 $is_following = false;
                 if ($user_id && $user_id !== $profile_user['id']) {
@@ -4085,11 +4106,11 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     <img src="<?= $profile_avatar ?? 'https://www.gravatar.com/avatar/' . md5(strtolower($profile_user['username'])) . '?d=mp&s=128' ?>" 
                          alt="Profile" 
                          class="w-24 h-24 rounded-full border-4 border-blue-500 shadow-lg">
-                    
+
                     <div class="flex-1">
                       <h1 class="text-3xl md:text-4xl font-bold mb-2 text-gray-900 dark:text-white">@<?= htmlspecialchars($profile_user['username']) ?></h1>
                       <p class="text-gray-600 dark:text-gray-400 text-lg mb-3"><?= htmlspecialchars($profile_user['tagline'] ?? 'Just a dev sharing random code') ?></p>
-                      
+
                       <div class="flex flex-wrap items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                         <div class="flex items-center gap-2">
                           <i class="far fa-calendar-alt"></i>
@@ -4103,7 +4124,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                         <?php endif; ?>
                       </div>
                     </div>
-                    
+
                     <!-- Follow Button -->
                     <?php if ($user_id && $user_id !== $profile_user['id']): ?>
                       <div>
@@ -4153,7 +4174,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           <i class="fas fa-file-code text-2xl text-blue-500 opacity-60"></i>
                         </div>
                       </div>
-                      
+
                       <div class="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 rounded-xl p-6 border border-green-200 dark:border-green-700">
                         <div class="flex items-center justify-between">
                           <div>
@@ -4163,7 +4184,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           <i class="fas fa-eye text-2xl text-green-500 opacity-60"></i>
                         </div>
                       </div>
-                      
+
                       <div class="bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-yellow-900/30 dark:to-yellow-800/30 rounded-xl p-6 border border-yellow-200 dark:border-yellow-700">
                         <div class="flex items-center justify-between">
                           <div>
@@ -4173,7 +4194,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           <i class="fas fa-star text-2xl text-yellow-500 opacity-60"></i>
                         </div>
                       </div>
-                      
+
                       <div class="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/30 rounded-xl p-6 border border-purple-200 dark:border-purple-700">
                         <div class="flex items-center justify-between">
                           <div>
@@ -4183,7 +4204,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           <i class="fas fa-users text-2xl text-purple-500 opacity-60"></i>
                         </div>
                       </div>
-                      
+
                       <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 dark:from-indigo-900/30 dark:to-indigo-800/30 rounded-xl p-6 border border-indigo-200 dark:border-indigo-700">
                         <div class="flex items-center justify-between">
                           <div>
@@ -4267,7 +4288,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                                 Public
                               </span>
                             </div>
-                            
+
                             <div class="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
                               <div class="flex items-center gap-1">
                                 <i class="fas fa-file-alt"></i>
@@ -4338,16 +4359,16 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   document.querySelectorAll('.tab-content').forEach(content => {
                     content.classList.add('hidden');
                   });
-                  
+
                   // Remove active state from all tabs
                   document.querySelectorAll('.profile-tab').forEach(tab => {
                     tab.classList.remove('active-tab', 'border-blue-500', 'text-blue-600', 'dark:text-blue-400', 'bg-blue-50', 'dark:bg-blue-900/20');
                     tab.classList.add('border-transparent', 'text-gray-500', 'dark:text-gray-400');
                   });
-                  
+
                   // Show selected tab content
                   document.getElementById('content-' + tabName).classList.remove('hidden');
-                  
+
                   // Add active state to selected tab
                   const activeTab = document.getElementById('tab-' + tabName);
                   activeTab.classList.add('active-tab', 'border-blue-500', 'text-blue-600', 'dark:text-blue-400', 'bg-blue-50', 'dark:bg-blue-900/20');
@@ -4392,14 +4413,14 @@ $theme = $_COOKIE['theme'] ?? 'dark';
               header('Location: /?page=login');
               exit;
             }
-            
+
             // Handle social account management
             if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
               if ($_POST['action'] === 'unlink_social') {
                 require_once 'social_media_integration.php';
                 $social = new SocialMediaIntegration();
                 $platform = $_POST['platform'] ?? '';
-                
+
                 if ($platform && $social->unlinkSocialAccount($user_id, $platform)) {
                   echo '<div class="mb-4 p-4 bg-green-100 text-green-700 rounded">Social account unlinked successfully!</div>';
                 } else {
@@ -4407,7 +4428,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                 }
               }
             }
-            
+
             // Set flag for user-settings.php to know it's included
             $settings_user_id = $user_id;
             $settings_username = $username;
@@ -4453,7 +4474,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   }
 
                   echo '<div class="mb-4 p-4 bg-green-100 text-green-700 rounded">Profile updated successfully!</div>';
-                  
+
                   // Refresh user data to show updated values
                   $stmt = $db->prepare("SELECT website, profile_image, tagline FROM users WHERE id = ?");
                   $stmt->execute([$user_id]);
@@ -4525,7 +4546,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
               $stmt->execute([$_GET['edit'], $user_id]);
               $editing_collection = $stmt->fetch();
             }
-            
+
             // Get user's collections with more details
             $stmt = $db->prepare("SELECT c.*, COUNT(cp.paste_id) as paste_count,
                                          (SELECT COUNT(*) FROM collection_pastes cp2 
@@ -4561,20 +4582,20 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   <?php if ($editing_collection): ?>
                     <input type="hidden" name="collection_id" value="<?= $editing_collection['id'] ?>">
                   <?php endif; ?>
-                  
+
                   <div>
                     <label class="block text-sm font-medium mb-2">Collection Name:</label>
                     <input type="text" name="collection_name" required 
                            value="<?= $editing_collection ? htmlspecialchars($editing_collection['name']) : '' ?>"
                            class="w-full px-4 py-2 rounded-lg border dark:bg-gray-600">
                   </div>
-                  
+
                   <div>
                     <label class="block text-sm font-medium mb-2">Description:</label>
                     <textarea name="collection_description" rows="3" 
                               class="w-full px-4 py-2 rounded-lg border dark:bg-gray-600"><?= $editing_collection ? htmlspecialchars($editing_collection['description']) : '' ?></textarea>
                   </div>
-                  
+
                   <div>
                     <label class="flex items-center space-x-2">
                       <input type="checkbox" name="is_public" 
@@ -4583,7 +4604,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       <span>Public collection (others can view)</span>
                     </label>
                   </div>
-                  
+
                   <div class="flex gap-2">
                     <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
                       <i class="fas fa-save mr-1"></i>
@@ -4624,14 +4645,14 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           </button>
                         </div>
                       </div>
-                      
+
                       <!-- Collection Description -->
                       <?php if ($collection['description']): ?>
                         <p class="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-2">
                           <?= htmlspecialchars($collection['description']) ?>
                         </p>
                       <?php endif; ?>
-                      
+
                       <!-- Collection Stats -->
                       <div class="space-y-2 mb-4">
                         <div class="flex items-center justify-between text-sm">
@@ -4647,7 +4668,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           <span class="font-medium"><?= human_time_diff($collection['updated_at']) ?></span>
                         </div>
                       </div>
-                      
+
                       <!-- Action Button -->
                       <div class="flex gap-2">
                         <a href="?page=collection&collection_id=<?= $collection['id'] ?>" 
@@ -4678,7 +4699,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   form.querySelector('input[name="collection_name"]').focus();
                 }
               }
-              
+
               function deleteCollection(collectionId) {
                 Swal.fire({
                   title: 'Delete Collection?',
@@ -4726,7 +4747,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
               ");
               $stmt->execute([$collection_id]);
               $collection_pastes = $stmt->fetchAll(PDO::FETCH_ASSOC);
-              
+
               // Get collection owner info
               $stmt = $db->prepare("SELECT u.username, u.profile_image FROM users u WHERE u.id = ?");
               $stmt->execute([$collection['user_id']]);
@@ -4744,11 +4765,11 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       <span class="bg-gray-500 text-white text-xs px-2 py-1 rounded">Private</span>
                     <?php endif; ?>
                   </div>
-                  
+
                   <?php if ($collection['description']): ?>
                     <p class="text-gray-600 dark:text-gray-400 mb-3"><?= htmlspecialchars($collection['description']) ?></p>
                   <?php endif; ?>
-                  
+
                   <div class="flex items-center gap-4 text-sm text-gray-500">
                     <div class="flex items-center gap-2">
                       <img src="<?= $collection_owner['profile_image'] ?? 'https://www.gravatar.com/avatar/'.md5(strtolower($collection_owner['username'])).'?d=mp&s=24' ?>" 
@@ -4765,7 +4786,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     <?php endif; ?>
                   </div>
                 </div>
-                
+
                 <?php if ($user_id && $collection['user_id'] === $user_id): ?>
                   <div class="flex gap-2">
                     <button onclick="editCollection(<?= $collection['id'] ?>)" class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm">
@@ -4802,7 +4823,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                               <?= htmlspecialchars($paste['title']) ?>
                             </a>
                           </h3>
-                          
+
                           <div class="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
                             <div class="flex items-center gap-2">
                               <img src="<?= $paste['profile_image'] ?? 'https://www.gravatar.com/avatar/'.md5(strtolower($paste['username'] ?? 'anonymous')).'?d=mp&s=20' ?>" 
@@ -4826,7 +4847,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                             <span>•</span>
                             <span>Added to collection <?= human_time_diff($paste['added_at']) ?></span>
                           </div>
-                          
+
                           <!-- Paste Tags -->
                           <?php if (!empty($paste['tags'])): ?>
                             <div class="mb-3">
@@ -4837,7 +4858,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                               <?php endforeach; ?>
                             </div>
                           <?php endif; ?>
-                          
+
                           <!-- Content Preview -->
                           <?php if (strlen($paste['content']) > 0): ?>
                             <div class="bg-white dark:bg-gray-800 rounded p-3 mb-3 font-mono text-sm">
@@ -4847,7 +4868,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                             </div>
                           <?php endif; ?>
                         </div>
-                        
+
                         <?php if ($user_id && $collection['user_id'] === $user_id): ?>
                           <div class="ml-4">
                             <button onclick="removeFromCollection(<?= $collection['id'] ?>, <?= $paste['id'] ?>)" 
@@ -4858,7 +4879,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                           </div>
                         <?php endif; ?>
                       </div>
-                      
+
                       <!-- Paste Stats -->
                       <div class="flex items-center justify-between">
                         <div class="flex items-center gap-6 text-sm text-gray-500">
@@ -4871,7 +4892,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                             </span>
                           <?php endif; ?>
                         </div>
-                        
+
                         <div class="flex gap-2">
                           <a href="?id=<?= $paste['id'] ?>" 
                              class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm">
@@ -4914,12 +4935,12 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   }
                 });
               }
-              
+
               function editCollection(collectionId) {
                 // Redirect to edit collection page
                 window.location.href = `?page=collections&edit=${collectionId}`;
               }
-              
+
               function deleteCollection(collectionId) {
                 Swal.fire({
                   title: 'Delete Collection?',
@@ -4951,7 +4972,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
             // Get template categories
             $stmt = $db->query("SELECT DISTINCT category FROM paste_templates WHERE is_public = 1" . ($user_id ? " OR created_by = '$user_id'" : "") . " ORDER BY category");
             $categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
-            
+
             // Get templates
             $category_filter = $_GET['category'] ?? 'all';
             $where = "WHERE is_public = 1";
@@ -4961,11 +4982,11 @@ $theme = $_COOKIE['theme'] ?? 'dark';
             if ($category_filter !== 'all') {
               $where .= " AND category = " . $db->quote($category_filter);
             }
-            
+
             $stmt = $db->query("SELECT *, (created_by IS NOT NULL) as is_custom FROM paste_templates $where ORDER BY is_custom ASC, usage_count DESC, name ASC");
             $templates = $stmt->fetchAll(PDO::FETCH_ASSOC);
             ?>
-            
+
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
               <div class="flex justify-between items-center mb-6">
                 <h2 class="text-2xl font-bold">Code Templates</h2>
@@ -5077,7 +5098,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                         </form>
                       <?php endif; ?>
                     </div>
-                    
+
                     <div class="flex items-center justify-between text-sm">
                       <div class="flex items-center gap-2">
                         <span class="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded text-xs">
@@ -5094,7 +5115,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       </div>
                       <span class="text-gray-500"><?= $template['usage_count'] ?> uses</span>
                     </div>
-                    
+
                     <div class="mt-3 flex gap-2">
                       <button onclick="useTemplate(<?= $template['id'] ?>)" 
                               class="flex-1 bg-blue-500 text-white py-2 px-3 rounded text-sm hover:bg-blue-600">
@@ -5160,7 +5181,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       sessionStorage.setItem('templateContent', template.content);
                       sessionStorage.setItem('templateLanguage', template.language);
                       sessionStorage.setItem('templateName', template.name);
-                      
+
                       // Redirect to home page
                       window.location.href = '/?template=1';
                     } else {
@@ -5185,7 +5206,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                         useTemplate(templateId);
                       };
                       document.getElementById('templatePreviewModal').classList.remove('hidden');
-                      
+
                       // Highlight syntax if Prism is available
                       if (window.Prism) {
                         Prism.highlightAll();
@@ -5312,7 +5333,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                     <a href="import.php" class="block w-full bg-blue-500 text-white text-center py-3 px-4 rounded-lg hover:bg-blue-600 transition-colors">
                       <i class="fas fa-file-import mr-2"></i>Start Import Process
                     </a>
-                    
+
                     <div class="text-center text-sm text-gray-500 dark:text-gray-400">
                       Click above to go to the import page where you can upload files and configure import settings
                     </div>
@@ -5377,7 +5398,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   const checkboxes = document.querySelectorAll('input[name="paste_selection"]');
                   const checked = document.querySelectorAll('input[name="paste_selection"]:checked');
                   const selectAll = document.getElementById('selectAll');
-                  
+
                   selectAll.indeterminate = checked.length > 0 && checked.length < checkboxes.length;
                   selectAll.checked = checked.length === checkboxes.length;
                 }
@@ -5804,10 +5825,10 @@ plt.show()</code></pre>
             $email_verification_required = SiteSettings::get('email_verification_required', 0);
             $allowed_domains = SiteSettings::get('allowed_email_domains', '*');
             ?>
-            
+
             <div class="max-w-md mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8 animate-fade-in">
               <h2 class="text-2xl font-bold mb-6">Sign Up for PasteForge</h2>
-              
+
               <?php if (!$registration_enabled): ?>
                 <div class="mb-6 p-4 bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-200 rounded">
                   <h3 class="font-semibold mb-2">Registration Disabled</h3>
@@ -5833,7 +5854,7 @@ plt.show()</code></pre>
                     <?php endif; ?>
                   </div>
                 <?php endif; ?>
-                
+
                 <!-- Success Messages -->
                 <?php if (isset($_GET['success'])): ?>
                   <div class="mb-6 p-4 bg-green-100 dark:bg-green-900 border border-green-400 text-green-700 dark:text-green-200 rounded">
@@ -5861,7 +5882,7 @@ plt.show()</code></pre>
                       Only these email domains are allowed: <?= htmlspecialchars($allowed_domains) ?>
                     </div>
                   <?php endif; ?>
-                  
+
                   <form method="POST" class="space-y-4" onsubmit="return validateSignupForm(event)">
                     <input type="hidden" name="action" value="register">
                     <div>
@@ -5932,12 +5953,12 @@ plt.show()</code></pre>
               <h2 class="text-2xl font-bold mb-6">
                 <i class="fas fa-archive mr-2"></i>Global Search & Archive
               </h2>
-              
+
               <!-- Sleek Search Section -->
               <div class="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
                 <form method="GET" id="searchForm">
                   <input type="hidden" name="page" value="archive">
-                  
+
                   <!-- Main Search Row -->
                   <div class="flex flex-col lg:flex-row gap-3">
                     <!-- Search Input -->
@@ -5951,7 +5972,7 @@ plt.show()</code></pre>
                                class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                       </div>
                     </div>
-                    
+
                     <!-- Language Filter -->
                     <div class="min-w-0 lg:w-40">
                       <select name="language" class="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500">
@@ -5967,7 +5988,7 @@ plt.show()</code></pre>
                         <?php endforeach; ?>
                       </select>
                     </div>
-                    
+
                     <!-- Sort Filter -->
                     <div class="min-w-0 lg:w-36">
                       <select name="sort_by" class="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500">
@@ -5977,19 +5998,19 @@ plt.show()</code></pre>
                         <option value="title_asc" <?= ($_GET['sort_by'] ?? '') === 'title_asc' ? 'selected' : '' ?>>A-Z</option>
                       </select>
                     </div>
-                    
+
                     <!-- Search Button -->
                     <button type="submit" class="px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center">
                       <i class="fas fa-search lg:mr-2"></i>
                       <span class="hidden lg:inline">Search</span>
                     </button>
-                    
+
                     <!-- Advanced Toggle -->
                     <button type="button" onclick="toggleAdvancedFilters()" class="px-3 py-2.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                       <i class="fas fa-sliders-h"></i>
                     </button>
                   </div>
-                  
+
                   <!-- Advanced Filters (Hidden by default) -->
                   <div id="advancedFilters" class="hidden mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -6027,7 +6048,7 @@ plt.show()</code></pre>
                     </div>
                   </div>
                 </form>
-                
+
                 <!-- Quick Filter Pills (More Compact) -->
                 <?php if (empty($_GET['search']) && empty($_GET['language']) && empty($_GET['user'])): ?>
                 <div class="mt-3 flex flex-wrap gap-2">
@@ -6038,32 +6059,32 @@ plt.show()</code></pre>
                 </div>
                 <?php endif; ?>
               </div>
-              
+
               <!-- Search Results Summary -->
               <?php
               // Build search conditions
               $search_conditions = ["p.is_public = 1", "(p.expire_time IS NULL OR p.expire_time > ?)", "p.parent_paste_id IS NULL"];
               $search_params = [time()];
-              
+
               // Add search term
               if (!empty($_GET['search'])) {
                 $search_conditions[] = "(p.title LIKE ? OR p.content LIKE ? OR p.tags LIKE ?)";
                 $search_term = '%' . $_GET['search'] . '%';
                 $search_params = array_merge($search_params, [$search_term, $search_term, $search_term]);
               }
-              
+
               // Add language filter
               if (!empty($_GET['language'])) {
                 $search_conditions[] = "p.language = ?";
                 $search_params[] = $_GET['language'];
               }
-              
+
               // Add user filter
               if (!empty($_GET['user'])) {
                 $search_conditions[] = "u.username LIKE ?";
                 $search_params[] = '%' . $_GET['user'] . '%';
               }
-              
+
               // Add tags filter
               if (!empty($_GET['tags'])) {
                 $tags = explode(',', $_GET['tags']);
@@ -6079,18 +6100,18 @@ plt.show()</code></pre>
                   $search_conditions[] = "(" . implode(" OR ", $tag_conditions) . ")";
                 }
               }
-              
+
               // Add date filters
               if (!empty($_GET['date_from'])) {
                 $search_conditions[] = "p.created_at >= ?";
                 $search_params[] = strtotime($_GET['date_from']);
               }
-              
+
               if (!empty($_GET['date_to'])) {
                 $search_conditions[] = "p.created_at <= ?";
                 $search_params[] = strtotime($_GET['date_to'] . ' 23:59:59');
               }
-              
+
               // Build ORDER BY clause
               $sort_by = $_GET['sort_by'] ?? 'created_at_desc';
               switch($sort_by) {
@@ -6113,25 +6134,25 @@ plt.show()</code></pre>
                   $order_clause = 'ORDER BY p.created_at DESC';
                   break;
               }
-              
+
               // Get total count with filters
               $count_query = "
                 SELECT COUNT(*) as total 
                 FROM pastes p
                 LEFT JOIN users u ON p.user_id = u.id
                 WHERE " . implode(" AND ", $search_conditions);
-              
+
               $count_stmt = $db->prepare($count_query);
               $count_stmt->execute($search_params);
               $total_count = $count_stmt->fetch()['total'];
-              
+
               // Pagination
               // Limit archive view to 5 pastes per page
               $items_per_page = 5;
               $current_page = isset($_GET['p']) ? max(1, intval($_GET['p'])) : 1;
               $offset = ($current_page - 1) * $items_per_page;
               $total_pages = ceil($total_count / $items_per_page);
-              
+
               // Get filtered results
               $results_query = "
                 SELECT p.*, u.username,
@@ -6146,15 +6167,15 @@ plt.show()</code></pre>
                 WHERE " . implode(" AND ", $search_conditions) . "
                 {$order_clause}
                 LIMIT ? OFFSET ?";
-              
+
               $search_params[] = $items_per_page;
               $search_params[] = $offset;
-              
+
               $stmt = $db->prepare($results_query);
               $stmt->execute($search_params);
               $archive_pastes = $stmt->fetchAll();
               ?>
-              
+
               <?php if (!empty($_GET['search']) || !empty($_GET['language']) || !empty($_GET['user']) || !empty($_GET['tags']) || !empty($_GET['date_from']) || !empty($_GET['date_to'])): ?>
               <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <div class="flex items-center justify-between">
@@ -6173,7 +6194,7 @@ plt.show()</code></pre>
                     <i class="fas fa-times mr-1"></i>Clear Filters
                   </a>
                 </div>
-                
+
                 <!-- Active Filters -->
                 <div class="mt-3 flex flex-wrap gap-2">
                   <?php if (!empty($_GET['search'])): ?>
@@ -6199,7 +6220,7 @@ plt.show()</code></pre>
                 </div>
               </div>
               <?php endif; ?>
-              
+
               <div class="overflow-x-auto">
                 <table class="w-full table-auto">
                   <thead>
@@ -6238,7 +6259,7 @@ plt.show()</code></pre>
                               <a href="?id=<?= $paste['id'] ?>" class="text-blue-500 hover:text-blue-700 font-medium">
                                 <?= htmlspecialchars($paste['title']) ?>
                               </a>
-                              
+
                               <!-- Tags display -->
                               <?php if (!empty($paste['tags'])): ?>
                                 <div class="mt-1">
@@ -6249,7 +6270,7 @@ plt.show()</code></pre>
                                   <?php endforeach; ?>
                                 </div>
                               <?php endif; ?>
-                              
+
                               <?php if ($has_children): ?>
                                 <button onclick="toggleChildren(<?= $paste['id'] ?>)" 
                                         class="mt-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors">
@@ -6259,7 +6280,7 @@ plt.show()</code></pre>
                             </div>
                           </div>
                         </td>
-                        
+
                         <td class="px-4 py-3">
                           <div class="flex items-center gap-2">
                             <?php if ($paste['username']): ?>
@@ -6271,13 +6292,13 @@ plt.show()</code></pre>
                             <?php endif; ?>
                           </div>
                         </td>
-                        
+
                         <td class="px-4 py-3">
                           <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm">
                             <?= htmlspecialchars($paste['language']) ?>
                           </span>
                         </td>
-                        
+
                         <td class="px-4 py-3">
                           <div class="text-sm">
                             <?= human_time_diff($paste['created_at']) ?>
@@ -6288,7 +6309,7 @@ plt.show()</code></pre>
                             <?php endif; ?>
                           </div>
                         </td>
-                        
+
                         <td class="px-4 py-3">
                           <div class="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400">
                             <i class="fas fa-eye"></i>
@@ -6307,7 +6328,7 @@ plt.show()</code></pre>
                             <?php endif; ?>
                           </div>
                         </td>
-                        
+
                         <td class="px-4 py-3">
                           <div class="flex gap-1">
                             <a href="?id=<?= $paste['id'] ?>" 
@@ -6322,7 +6343,7 @@ plt.show()</code></pre>
                           </div>
                         </td>
                       </tr>
-                      
+
                       <!-- Hidden row for children -->
                       <?php if ($has_children): ?>
                       <tr id="children-<?= $paste['id'] ?>" class="hidden">
@@ -6348,7 +6369,7 @@ plt.show()</code></pre>
                     <?= number_format(min($current_page * $items_per_page, $total_count)) ?> 
                     of <?= number_format($total_count) ?> results
                   </div>
-                  
+
                   <!-- Pagination -->
                   <div class="flex space-x-2">
                     <?php if ($current_page > 1): ?>
@@ -6386,7 +6407,7 @@ plt.show()</code></pre>
                   const filters = document.getElementById('advancedFilters');
                   const button = event.target.closest('button');
                   const icon = button.querySelector('i');
-                  
+
                   filters.classList.toggle('hidden');
                   if (filters.classList.contains('hidden')) {
                     icon.className = 'fas fa-sliders-h';
@@ -6398,7 +6419,7 @@ plt.show()</code></pre>
                 // Enhanced search functionality
                 function quickFilter(type, value) {
                   const form = document.getElementById('searchForm');
-                  
+
                   if (type === 'date_range' && value === 'week') {
                     const oneWeekAgo = new Date();
                     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -6409,7 +6430,7 @@ plt.show()</code></pre>
                   } else {
                     document.querySelector(`[name="${type}"]`).value = value;
                   }
-                  
+
                   form.submit();
                 }
 
@@ -6451,17 +6472,17 @@ plt.show()</code></pre>
                 function toggleChildren(parentId) {
                   const childrenRow = document.getElementById(`children-${parentId}`);
                   const toggleText = document.getElementById(`toggle-text-${parentId}`);
-                  
+
                   if (childrenRow.classList.contains('hidden')) {
                     // Show children
                     childrenRow.classList.remove('hidden');
-                    
+
                     // Load children if not already loaded
                     if (!loadedChildren.has(parentId)) {
                       loadChildren(parentId);
                       loadedChildren.add(parentId);
                     }
-                    
+
                     toggleText.textContent = toggleText.textContent.replace('Show', 'Hide');
                   } else {
                     // Hide children
@@ -6473,7 +6494,7 @@ plt.show()</code></pre>
                 function loadChildren(parentId) {
                   const contentDiv = document.getElementById(`children-content-${parentId}`);
                   contentDiv.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading children...</div>';
-                  
+
                   fetch(`?page=archive&action=load_children&parent_id=${parentId}`)
                     .then(response => response.json())
                     .then(children => {
@@ -6481,7 +6502,7 @@ plt.show()</code></pre>
                         contentDiv.innerHTML = '<div class="text-center py-4 text-gray-500">No children found</div>';
                         return;
                       }
-                      
+
                       let html = '<div class="space-y-2">';
                       children.forEach(child => {
                         const timeAgo = formatTimeAgo(child.created_at);
@@ -6518,7 +6539,7 @@ plt.show()</code></pre>
                 function formatTimeAgo(timestamp) {
                   const now = Math.floor(Date.now() / 1000);
                   const diff = now - timestamp;
-                  
+
                   if (diff < 60) return 'just now';
                   if (diff < 3600) return Math.floor(diff / 60) + ' minutes ago';
                   if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
@@ -6536,7 +6557,7 @@ plt.show()</code></pre>
                   document.querySelectorAll('[data-expires]').forEach(element => {
                     const expireTime = parseInt(element.dataset.expires);
                     const timerSpan = element.querySelector('.countdown-timer');
-                    
+
                     if (timerSpan && expireTime) {
                       updateCountdown(timerSpan, expireTime);
                       setInterval(() => updateCountdown(timerSpan, expireTime), 1000);
@@ -6547,24 +6568,24 @@ plt.show()</code></pre>
                 function updateCountdown(element, expireTime) {
                   const now = Math.floor(Date.now() / 1000);
                   const timeLeft = expireTime - now;
-                  
+
                   if (timeLeft <= 0) {
                     element.textContent = 'Expired';
                     element.className = 'countdown-timer countdown-urgent';
                     return;
                   }
-                  
+
                   const days = Math.floor(timeLeft / 86400);
                   const hours = Math.floor((timeLeft % 86400) / 3600);
                   const minutes = Math.floor((timeLeft % 3600) / 60);
-                  
+
                   let display = '';
                   if (days > 0) display = `${days}d ${hours}h`;
                   else if (hours > 0) display = `${hours}h ${minutes}m`;
                   else display = `${minutes}m`;
-                  
+
                   element.textContent = `Expires in ${display}`;
-                  
+
                   if (timeLeft < 3600) {
                     element.className = 'countdown-timer countdown-urgent';
                   } else if (timeLeft < 86400) {
@@ -6596,10 +6617,10 @@ plt.show()</code></pre>
                   echo '0';
                 }
               ?>;
-              
+
               function validatePasteForm(event) {
                 const content = document.querySelector('textarea[name="content"]').value;
-                
+
                 // Check paste size limit
                 if (maxPasteSize > 0 && content.length > maxPasteSize) {
                   event.preventDefault();
@@ -6611,7 +6632,7 @@ plt.show()</code></pre>
                   });
                   return false;
                 }
-                
+
                 // Check daily limit for logged-in users
                 <?php if ($user_id): ?>
                 if (dailyLimitFree > 0 && userPastesToday >= dailyLimitFree) {
@@ -6625,15 +6646,15 @@ plt.show()</code></pre>
                   return false;
                 }
                 <?php endif; ?>
-                
+
                 return true;
               }
-              
+
               // Real-time content size indicator
               function updateContentStats() {
                 const content = document.querySelector('textarea[name="content"]').value;
                 const size = content.length;
-                
+
                 // Update or create size indicator
                 let indicator = document.getElementById('content-size-indicator');
                 if (!indicator) {
@@ -6642,11 +6663,11 @@ plt.show()</code></pre>
                   indicator.className = 'text-sm mt-1';
                   document.querySelector('textarea[name="content"]').parentNode.appendChild(indicator);
                 }
-                
+
                 if (maxPasteSize > 0) {
                   const percentage = (size / maxPasteSize) * 100;
                   const isOverLimit = size > maxPasteSize;
-                  
+
                   indicator.className = `text-sm mt-1 ${isOverLimit ? 'text-red-500' : percentage > 90 ? 'text-yellow-500' : 'text-gray-500'}`;
                   indicator.innerHTML = `${size.toLocaleString()} / ${maxPasteSize.toLocaleString()} bytes (${percentage.toFixed(1)}%)`;
                 } else {
@@ -6654,7 +6675,7 @@ plt.show()</code></pre>
                   indicator.innerHTML = `${size.toLocaleString()} bytes`;
                 }
               }
-              
+
               // Initialize form with cloned content, fork data, or template if available
               window.addEventListener('DOMContentLoaded', () => {
                 const clonedContent = sessionStorage.getItem('clonedContent');
@@ -6676,21 +6697,21 @@ plt.show()</code></pre>
                   if (forkTitle) {
                     document.querySelector('input[name="title"]').value = 'Fork of ' + forkTitle;
                   }
-                  
+
                   // Add hidden field for original paste ID
                   const hiddenField = document.createElement('input');
                   hiddenField.type = 'hidden';
                   hiddenField.name = 'original_paste_id';
                   hiddenField.value = forkPasteId;
                   document.querySelector('form').appendChild(hiddenField);
-                  
+
                   // Add hidden field to mark as fork
                   const forkField = document.createElement('input');
                   forkField.type = 'hidden';
                   forkField.name = 'is_fork';
                   forkField.value = '1';
                   document.querySelector('form').appendChild(forkField);
-                  
+
                   // Clear the stored fork data
                   sessionStorage.removeItem('forkContent');
                   sessionStorage.removeItem('forkPasteId');
@@ -6717,7 +6738,7 @@ plt.show()</code></pre>
                   sessionStorage.removeItem('templateLanguage');
                   sessionStorage.removeItem('templateName');
                 }
-                
+
                 // Initialize content size indicator
                 const contentTextarea = document.querySelector('textarea[name="content"]');
                 if (contentTextarea) {
@@ -6727,7 +6748,7 @@ plt.show()</code></pre>
               });
             </script>
             <div class="space-y-6">
-              
+
 
               <div class="paste-form-element">
                 <label class="block text-sm font-medium mb-2">Title</label>
@@ -7081,7 +7102,7 @@ plt.show()</code></pre>
                 <i class="fas fa-times text-xl"></i>
               </button>
             </div>
-            
+
             <div class="p-6 space-y-6">
               <!-- Paste Metadata -->
               <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
@@ -7180,7 +7201,7 @@ plt.show()</code></pre>
           </div>
         </div>
       `;
-      
+
       document.body.insertAdjacentHTML('beforeend', modalHtml);
     }
 
@@ -7195,7 +7216,7 @@ plt.show()</code></pre>
       let shareUrl;
       const encodedUrl = encodeURIComponent(url);
       const encodedTitle = encodeURIComponent(title);
-      
+
       switch (platform) {
         case 'twitter':
           shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(`Check out this code: ${title}`)}&url=${encodedUrl}`;
@@ -7228,7 +7249,7 @@ plt.show()</code></pre>
         default:
           return;
       }
-      
+
       window.open(shareUrl, '_blank', 'width=600,height=400');
     }
 
@@ -7257,7 +7278,7 @@ plt.show()</code></pre>
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
-        
+
         Swal.fire({
           icon: 'success',
           title: 'Copied!',
@@ -7302,12 +7323,12 @@ plt.show()</code></pre>
 
     function displayShareAnalytics(analytics) {
       const container = document.getElementById('shareAnalytics');
-      
+
       if (analytics.length === 0) {
         container.innerHTML = '<p class="text-gray-500 text-sm">No shares yet.</p>';
       } else {
         let html = '<div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4"><h4 class="font-medium mb-3">Share Analytics</h4><div class="space-y-2">';
-        
+
         analytics.forEach(item => {
           html += `
             <div class="flex justify-between items-center text-sm">
@@ -7319,11 +7340,11 @@ plt.show()</code></pre>
             </div>
           `;
         });
-        
+
         html += '</div></div>';
         container.innerHTML = html;
       }
-      
+
       container.classList.remove('hidden');
     }
 
@@ -7344,7 +7365,7 @@ plt.show()</code></pre>
                 <i class="fas fa-times text-xl"></i>
               </button>
             </div>
-            
+
             <div class="p-6 space-y-6">
               <!-- Direct Link -->
               <div>
@@ -7444,9 +7465,9 @@ plt.show()</code></pre>
           </div>
         </div>
       `;
-      
+
       document.body.insertAdjacentHTML('beforeend', modalHtml);
-      
+
       // Store paste ID for embed generation
       document.getElementById('shareModal').dataset.pasteId = shareData.url.split('id=')[1];
     }
@@ -7499,7 +7520,7 @@ plt.show()</code></pre>
       const pasteId = modal.dataset.pasteId;
       const theme = document.getElementById('embedTheme').value;
       const height = document.getElementById('embedHeight').value;
-      
+
       fetch('paste_share.php', {
         method: 'POST',
         headers: {
@@ -7540,7 +7561,7 @@ plt.show()</code></pre>
         });
         return;
       }
-      
+
       embedCode.select();
       navigator.clipboard.writeText(embedCode.value).then(() => {
         Swal.fire({
@@ -7565,7 +7586,7 @@ plt.show()</code></pre>
         });
         return;
       }
-      
+
       const previewUrl = embedCode.dataset.previewUrl;
       if (previewUrl) {
         window.open(previewUrl, '_blank');
@@ -7586,7 +7607,7 @@ plt.show()</code></pre>
       // Set default selections
       const fromSelect = document.getElementById('fromVersion');
       const toSelect = document.getElementById('toVersion');
-      
+
       // Default: compare latest two versions
       if (fromSelect.options.length > 1) {
         fromSelect.selectedIndex = 1; // Second option (previous version)
@@ -7609,7 +7630,7 @@ plt.show()</code></pre>
     function generateDiff() {
       const fromVersion = document.getElementById('fromVersion').value;
       const toVersion = document.getElementById('toVersion').value;
-      
+
       if (fromVersion === toVersion) {
         Swal.fire({
           icon: 'warning',
@@ -7618,11 +7639,11 @@ plt.show()</code></pre>
         });
         return;
       }
-      
+
       // Show loading
       clearDiff();
       document.getElementById('diffLoading').classList.remove('hidden');
-      
+
       // Fetch diff data
       fetch('version_diff.php', {
         method: 'POST',
@@ -7634,7 +7655,7 @@ plt.show()</code></pre>
       .then(response => response.json())
       .then(data => {
         document.getElementById('diffLoading').classList.add('hidden');
-        
+
         if (data.success) {
           if (data.has_differences) {
             document.getElementById('diffContent').innerHTML = data.diff_html;
@@ -7679,7 +7700,7 @@ plt.show()</code></pre>
         });
         return;
       <?php endif; ?>
-      
+
       const modal = document.getElementById('embedModal');
       if (modal) {
         modal.classList.remove('hidden');
@@ -7698,12 +7719,12 @@ plt.show()</code></pre>
       const theme = document.getElementById('embedTheme').value;
       const height = document.getElementById('embedHeight').value;
       const preview = document.getElementById('embedPreview');
-      
+
       if (preview) {
         preview.src = `embed.php?id=<?= $paste['id'] ?>&theme=${theme}`;
         preview.height = height;
       }
-      
+
       updateEmbedCode();
     }
 
@@ -7712,10 +7733,10 @@ plt.show()</code></pre>
       const width = document.getElementById('embedWidth').value;
       const height = document.getElementById('embedHeight').value;
       const baseUrl = window.location.origin;
-      
+
       const embedUrl = `${baseUrl}/embed.php?id=<?= $paste['id'] ?>&theme=${theme}`;
       const embedCode = `<iframe src="${embedUrl}" width="${width}" height="${height}" frameborder="0"></iframe>`;
-      
+
       const textarea = document.getElementById('embedCodeTextarea');
       if (textarea) {
         textarea.value = embedCode;
@@ -7831,12 +7852,12 @@ plt.show()</code></pre>
         preConfirm: () => {
           const reason = document.getElementById('report-reason').value;
           const description = document.getElementById('report-description').value;
-          
+
           if (!reason) {
             Swal.showValidationMessage('Please select a reason');
             return false;
           }
-          
+
           return { reason, description };
         }
       }).then((result) => {
@@ -7863,7 +7884,7 @@ plt.show()</code></pre>
       document.querySelectorAll('[id^="replies-"]').forEach(function(element) {
         element.classList.remove('hidden');
       });
-      
+
       // Load templates lazily only when needed
       const templateSelector = document.getElementById('templateSelector');
       if (templateSelector) {
@@ -7874,11 +7895,11 @@ plt.show()</code></pre>
           }
         }, { once: true });
       }
-      
+
       // Initialize countdown timers
       initializeCountdownTimers();
     });
-    
+
     // Countdown timer functionality
     function initializeCountdownTimers() {
       // Initialize all countdown timers on the page
@@ -7889,12 +7910,12 @@ plt.show()</code></pre>
         }
       });
     }
-    
+
     function startCountdown(element, expireTime) {
       function updateCountdown() {
         const now = Math.floor(Date.now() / 1000);
         const timeLeft = expireTime - now;
-        
+
         if (timeLeft <= 0) {
           element.innerHTML = '<span class="text-red-500 font-bold">EXPIRED</span>';
           // If viewing an expired paste, redirect to homepage
@@ -7905,15 +7926,15 @@ plt.show()</code></pre>
           }
           return;
         }
-        
+
         const days = Math.floor(timeLeft / 86400);
         const hours = Math.floor((timeLeft % 86400) / 3600);
         const minutes = Math.floor((timeLeft % 3600) / 60);
         const seconds = timeLeft % 60;
-        
+
         let display = '';
         let urgencyClass = 'countdown-normal';
-        
+
         if (timeLeft < 60) {
           urgencyClass = 'countdown-urgent';
           display = `${seconds}s`;
@@ -7925,16 +7946,16 @@ plt.show()</code></pre>
         } else {
           display = `${days}d ${hours}h`;
         }
-        
+
         const iconColor = timeLeft < 60 ? 'text-red-500' : (timeLeft < 3600 ? 'text-yellow-500' : 'text-gray-500');
-        
+
         element.innerHTML = `<i class="fas fa-clock ${iconColor}"></i> <span class="countdown-timer ${urgencyClass}">${display}</span>`;
-        
+
         // Update frequency based on urgency
         const updateInterval = timeLeft < 60 ? 1000 : (timeLeft < 3600 ? 1000 : 60000);
         setTimeout(updateCountdown, updateInterval);
       }
-      
+
       updateCountdown();
     }
 
@@ -7942,13 +7963,13 @@ plt.show()</code></pre>
     function loadTemplatesForSelector() {
       const selector = document.getElementById('templateSelector');
       if (!selector) return;
-      
+
       fetch('?action=get_templates')
         .then(response => response.json())
         .then(templates => {
           // Clear existing options except the first one
           selector.innerHTML = '<option value="">Choose a template...</option>';
-          
+
           // Group templates by category
           const grouped = {};
           templates.forEach(template => {
@@ -7957,19 +7978,19 @@ plt.show()</code></pre>
             }
             grouped[template.category].push(template);
           });
-          
+
           // Add options grouped by category
           Object.keys(grouped).sort().forEach(category => {
             const optgroup = document.createElement('optgroup');
             optgroup.label = category.charAt(0).toUpperCase() + category.slice(1);
-            
+
             grouped[category].forEach(template => {
               const option = document.createElement('option');
               option.value = template.id;
               option.textContent = `${template.name} (${template.language})`;
               optgroup.appendChild(option);
             });
-            
+
             selector.appendChild(optgroup);
           });
         })
@@ -7979,12 +8000,12 @@ plt.show()</code></pre>
     function loadSelectedTemplate() {
       const selector = document.getElementById('templateSelector');
       const templateId = selector.value;
-      
+
       if (!templateId) {
         alert('Please select a template first');
         return;
       }
-      
+
       fetch(`?action=get_template&id=${templateId}`)
         .then(response => response.json())
         .then(template => {
@@ -7993,7 +8014,7 @@ plt.show()</code></pre>
             document.querySelector('input[name="title"]').value = template.name;
             document.querySelector('textarea[name="content"]').value = template.content;
             document.querySelector('select[name="language"]').value = template.language;
-            
+
             // Show success message
             Swal.fire({
               icon: 'success',
@@ -8030,11 +8051,11 @@ plt.show()</code></pre>
         });
         return;
       <?php endif; ?>
-      
+
       const content = document.querySelector('textarea[name="content"]').value;
       const language = document.querySelector('select[name="language"]').value;
       const title = document.querySelector('input[name="title"]').value;
-      
+
       if (!content.trim()) {
         Swal.fire({
           icon: 'warning',
@@ -8043,7 +8064,7 @@ plt.show()</code></pre>
         });
         return;
       }
-      
+
       Swal.fire({
         title: 'Save as Template',
         html: `
@@ -8076,12 +8097,12 @@ plt.show()</code></pre>
           const description = document.getElementById('template-description').value.trim();
           const category = document.getElementById('template-category').value.trim();
           const isPublic = document.getElementById('template-public').checked;
-          
+
           if (!name) {
             Swal.showValidationMessage('Please enter a template name');
             return false;
           }
-          
+
           return { name, description, category, isPublic };
         }
       }).then((result) => {
@@ -8096,7 +8117,7 @@ plt.show()</code></pre>
           if (result.value.isPublic) {
             formData.append('is_public', '1');
           }
-          
+
           fetch('', {
             method: 'POST',
             body: formData
@@ -8110,7 +8131,7 @@ plt.show()</code></pre>
               showConfirmButton: false,
               timer: 2000
             });
-            
+
             // Reload templates for selector
             loadTemplatesForSelector();
           }).catch(error => {
