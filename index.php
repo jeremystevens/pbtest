@@ -1800,7 +1800,9 @@ $theme = $_COOKIE['theme'] ?? 'dark';
         return;
       }
       
-      fetch('?action=latest_pastes')
+        // Always request from index.php so the sidebar updates correctly even when
+        // viewing other pages
+        fetch('/index.php?action=latest_pastes')
         .then(response => {
           if (!response.ok) {
             // Don't throw error for non-critical sidebar updates
