@@ -7007,7 +7007,7 @@ plt.show()</code></pre>
                   </div>
                   <input type="hidden" name="is_public" id="is_public_hidden" value="1">
                 </div>
-                <div>
+                <div class="mt-5">
                   <label class="flex items-center space-x-2">
                     <input type="checkbox" name="burn_after_read" class="rounded">
                     <span>Burn after reading</span>
