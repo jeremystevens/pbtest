@@ -1,0 +1,63 @@
+# .htaccess — Advanced hardening
+
+# Block sensitive files from being served
+<FilesMatch "^(\.git|\.svn|\.ht|error\.log|README\.md)">
+    Require all denied
+</FilesMatch>
+
+# Block database files
+<FilesMatch "\.(sqlite|db)$">
+    Require all denied
+</FilesMatch>
+
+# Optional: If using older Apache 2.2 servers, fallback syntax:
+# <FilesMatch "^(\.git|\.svn|\.ht|error\.log|README\.md)">
+#    Order allow,deny
+#    Deny from all
+# </FilesMatch>
+
+# Optional: prevent directory listing
+Options -Indexes
+
+# Force HTTPS (recommended — comment out if your server forces it elsewhere)
+RewriteEngine On
+RewriteCond %{HTTPS} off
+RewriteRule (.*) https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+# Add basic security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "no-referrer-when-downgrade"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-src 'self'"
+</IfModule>
+
+# Block common attack patterns
+<IfModule mod_rewrite.c>
+    RewriteCond %{QUERY_STRING} (\.\./|\.\.\\) [NC,OR]
+    RewriteCond %{QUERY_STRING} (\<|%3C).*script.*(\>|%3E) [NC,OR]
+    RewriteCond %{QUERY_STRING} (\<|%3C).*iframe.*(\>|%3E) [NC,OR]
+    RewriteCond %{QUERY_STRING} (\<|%3C).*object.*(\>|%3E) [NC,OR]
+    RewriteCond %{QUERY_STRING} (\<|%3C).*embed.*(\>|%3E) [NC,OR]
+    RewriteCond %{QUERY_STRING} (union(.*?)select) [NC,OR]
+    RewriteCond %{QUERY_STRING} (concat(.*?)) [NC,OR]
+    RewriteCond %{QUERY_STRING} (\/\*.*\*\/) [NC,OR]
+    RewriteCond %{QUERY_STRING} (\.\.\/) [NC]
+    RewriteRule ^(.*)$ - [F,L]
+</IfModule>
+
+# Block common bad bots / scanners
+SetEnvIfNoCase User-Agent "dirbuster" bad_bot
+SetEnvIfNoCase User-Agent "dirb" bad_bot
+SetEnvIfNoCase User-Agent "nikto" bad_bot
+SetEnvIfNoCase User-Agent "wpscan" bad_bot
+SetEnvIfNoCase User-Agent "sqlmap" bad_bot
+SetEnvIfNoCase User-Agent "acunetix" bad_bot
+SetEnvIfNoCase User-Agent "crawler" bad_bot
+SetEnvIfNoCase User-Agent "scanner" bad_bot
+
+<RequireAll>
+    Require all granted
+    Require not env bad_bot
+</RequireAll>
