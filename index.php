@@ -6788,10 +6788,16 @@ plt.show()</code></pre>
                 </div>
               </div>
 
-              <div class="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-sm font-medium mb-1">Language:</label>
-                  <select name="language" class="w-full p-2 rounded border dark:bg-gray-700 dark:border-gray-600">
+              <button type="button" id="toggleAdvanced" class="text-sm font-medium text-left w-full flex items-center justify-between bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded">
+                <span>⚙️ Advanced Options</span>
+                <span id="advArrow" class="ml-2">▲</span>
+              </button>
+
+              <div id="advancedOptions" class="space-y-6 hidden">
+                <div class="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Language:</label>
+                    <select name="language" class="w-full p-2 rounded border dark:bg-gray-700 dark:border-gray-600">
                     <option value="plaintext">Plain Text</option>
                     <option value="abap">ABAP</option>
                     <option value="actionscript">ActionScript</option>
@@ -6949,6 +6955,10 @@ plt.show()</code></pre>
                     <option value="3600">1 hour</option>
                     <option value="86400">1 day</option>
                     <option value="604800">1 week</option>
+                    <option value="1209600">2 Weeks</option>
+                    <option value="2592000">1 Month</option>
+                    <option value="15552000">6 Months</option>
+                    <option value="31536000">1 Year</option>
                   </select>
                 </div>
               </div>
@@ -6980,10 +6990,22 @@ plt.show()</code></pre>
 
               <div class="grid md:grid-cols-2 gap-4 paste-form-element">
                 <div>
-                  <label class="flex items-center space-x-2">
-                    <input type="checkbox" name="is_public" checked class="rounded">
-                    <span>Public paste</span>
-                  </label>
+                  <span class="block text-sm font-medium mb-1">Visibility:</span>
+                  <div class="flex items-center space-x-4">
+                    <label class="flex items-center space-x-1">
+                      <input type="radio" name="visibility" value="public" checked class="rounded">
+                      <span>Public</span>
+                    </label>
+                    <label class="flex items-center space-x-1">
+                      <input type="radio" name="visibility" value="unlisted" class="rounded">
+                      <span>Unlisted</span>
+                    </label>
+                    <label class="flex items-center space-x-1">
+                      <input type="radio" name="visibility" value="private" class="rounded">
+                      <span>Private</span>
+                    </label>
+                  </div>
+                  <input type="hidden" name="is_public" id="is_public_hidden" value="1">
                 </div>
                 <div>
                   <label class="flex items-center space-x-2">
@@ -6997,16 +7019,17 @@ plt.show()</code></pre>
                 <label class="block text-sm font-medium mb-2">Password (optional)</label>
                 <input type="password" name="password" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" placeholder="Password protect this paste">
               </div>
-
-              <!-- Hidden input for parent paste ID (for paste chains) -->
-              <input type="hidden" name="parent_paste_id" value="<?php echo htmlspecialchars($_GET['parent_id'] ?? ''); ?>">
-
-              <div class="text-center paste-form-element">
-                <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105">
-                  <i class="fas fa-plus mr-2"></i>Create Paste
-                </button>
-              </div>
             </div>
+
+            <!-- Hidden input for parent paste ID (for paste chains) -->
+            <input type="hidden" name="parent_paste_id" value="<?php echo htmlspecialchars($_GET['parent_id'] ?? ''); ?>">
+
+            <div class="text-center paste-form-element">
+              <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105">
+                <i class="fas fa-plus mr-2"></i>Create Paste
+              </button>
+            </div>
+          </div>
           </form>
           <?php endif; ?>
           <?php endif; ?>
@@ -7040,7 +7063,7 @@ plt.show()</code></pre>
       })
     }
 
-    function openCollectionModal() {
+  function openCollectionModal() {
       const modal = document.getElementById('collectionModal');
       if (modal) {
         modal.classList.remove('hidden');
@@ -7068,10 +7091,38 @@ plt.show()</code></pre>
 
     // Close modal with Escape key
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        closeCollectionModal();
+    if (e.key === 'Escape') {
+      closeCollectionModal();
+    }
+  });
+
+  // Advanced options toggle
+  const advToggle = document.getElementById('toggleAdvanced');
+  const advSection = document.getElementById('advancedOptions');
+  const advArrow = document.getElementById('advArrow');
+  if (advToggle && advSection && advArrow) {
+    advToggle.addEventListener('click', () => {
+      advSection.classList.toggle('hidden');
+      if (advSection.classList.contains('hidden')) {
+        advArrow.textContent = '▲';
+      } else {
+        advArrow.textContent = '▼';
       }
     });
+  }
+
+  // Visibility radio -> is_public handling
+  const visibilityRadios = document.querySelectorAll('input[name="visibility"]');
+  const isPublicHidden = document.getElementById('is_public_hidden');
+  visibilityRadios.forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (radio.value === 'private') {
+        isPublicHidden.disabled = true;
+      } else {
+        isPublicHidden.disabled = false;
+      }
+    });
+  });
 
     // Enhanced Share Modal Functions
     function openEnhancedShareModal(pasteId) {
