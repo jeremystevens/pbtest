@@ -3380,11 +3380,13 @@ $theme = $_COOKIE['theme'] ?? 'dark';
               }
 
               function viewThread(threadId) {
-                window.location.href = `?id=<?= $paste['id'] ?>&view_thread=${threadId}`;
+               // window.location.href = `?id=<?= $paste['id'] ?>&view_thread=${threadId}`;
+               window.location.href = `?id=<?= isset($paste['id']) ? $paste['id'] : '' ?>&view_thread=${threadId}`;
               }
 
               function backToDiscussions() {
-                window.location.href = `?id=<?= $paste['id'] ?>`;
+               // window.location.href = `?id=<?= $paste['id'] ?>`;
+               window.location.href = `?id=<?= isset($paste['id']) ? $paste['id'] : '' ?>`;
               }
 
               function deleteDiscussionPost(postId, threadId, pasteId) {
@@ -7828,7 +7830,9 @@ if (importBtnEl && importFileInput) {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: `paste_id=<?= $paste['id'] ?>&from_version=${fromVersion}&to_version=${toVersion}`
+       // body: `paste_id=<?= $paste['id'] ?>&from_version=${fromVersion}&to_version=${toVersion}`
+       //body: `paste_id=<?= isset($paste['id']) ? $paste['id'] : '' ?>&from_version=${fromVersion}&to_version=${toVersion}`
+       body: `paste_id=<?= isset($paste['id']) ? $paste['id'] : '' ?>&from_version=${fromVersion}&to_version=${toVersion}`
       })
       .then(response => response.json())
       .then(data => {
@@ -7894,17 +7898,18 @@ if (importBtnEl && importFileInput) {
     }
 
     function updateEmbedPreview() {
-      const theme = document.getElementById('embedTheme').value;
-      const height = document.getElementById('embedHeight').value;
-      const preview = document.getElementById('embedPreview');
+  const theme = document.getElementById('embedTheme').value;
+  const height = document.getElementById('embedHeight').value;
+  const preview = document.getElementById('embedPreview');
 
-      if (preview) {
-        preview.src = `embed.php?id=<?= $paste['id'] ?>&theme=${theme}`;
-        preview.height = height;
-      }
+  if (preview) {
+    preview.src = `embed.php?id=<?= isset($paste['id']) ? $paste['id'] : '' ?>&theme=${theme}`;
+    preview.height = height;
+  }
 
-      updateEmbedCode();
-    }
+  updateEmbedCode();
+}
+
 
     function updateEmbedCode() {
       const theme = document.getElementById('embedTheme').value;
@@ -7912,6 +7917,7 @@ if (importBtnEl && importFileInput) {
       const height = document.getElementById('embedHeight').value;
       const baseUrl = window.location.origin;
 
+      //const embedUrl = `${baseUrl}/embed.php?id=<?= isset($paste['id']) ? $paste['id'] : '' ?>&theme=${theme}`;
       const embedUrl = `${baseUrl}/embed.php?id=<?= isset($paste['id']) ? $paste['id'] : '' ?>&theme=${theme}`;
       const embedCode = `<iframe src="${embedUrl}" width="${width}" height="${height}" frameborder="0"></iframe>`;
 
