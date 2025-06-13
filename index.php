@@ -10,7 +10,7 @@ require_once 'audit_logger.php';
 require_once 'rate_limiter.php';
 require_once 'error_handler.php';
 require_once 'settings_helper.php';
-
+require_once 'fuzz_protection.php';
 // Initialize security systems
 $audit_logger = new AuditLogger();
 $rate_limiter = new RateLimiter();
@@ -7907,7 +7907,7 @@ if (importBtnEl && importFileInput) {
       const height = document.getElementById('embedHeight').value;
       const baseUrl = window.location.origin;
 
-      const embedUrl = `${baseUrl}/embed.php?id=<?= $paste['id'] ?>&theme=${theme}`;
+      const embedUrl = `${baseUrl}/embed.php?id=<?= isset($paste['id']) ? $paste['id'] : '' ?>&theme=${theme}`;
       const embedCode = `<iframe src="${embedUrl}" width="${width}" height="${height}" frameborder="0"></iframe>`;
 
       const textarea = document.getElementById('embedCodeTextarea');
