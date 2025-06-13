@@ -7171,7 +7171,7 @@ let selectedLang = null;
 const templateSnippets = {
   python: "#!/usr/bin/env python3\n\"\"\"\nDescription: [Brief description of what this script does]\nAuthor: [Your name]\nDate: 2025-06-13\n\"\"\"\n\ndef main():\n    # Your code here\n    pass\n\nif __name__ == \"__main__\":\n    main()\n",
   javascript: "#!/usr/bin/env node\n/**\n * Description: [Brief description of what this script does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\nfunction main() {\n  // Your code here\n}\n\nmain();\n",
-  php: "<?php\n/**\n * Description: [Brief description of what this script does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\nfunction main() {\n    // Your code here\n}\n\nmain();\n",
+  php: "<" + "?php\n/**\n * Description: [Brief description of what this script does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\nfunction main() {\n    // Your code here\n}\n\nmain();\n",
   cpp: "#include <iostream>\n\n// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nint main() {\n    // Your code here\n    return 0;\n}\n",
   java: "/**\n * Description: [Brief description of what this program does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\npublic class Main {\n    public static void main(String[] args) {\n        // Your code here\n    }\n}\n",
   go: "package main\n\nimport \"fmt\"\n\n// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nfunc main() {\n    // Your code here\n    fmt.Println(\"Hello\")\n}\n",
