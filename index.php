@@ -7169,17 +7169,18 @@ const languageItems = document.querySelectorAll("#languageList .language-item");
 const templateLoad = document.getElementById("loadTemplateConfirm");
 let selectedLang = null;
 const templateSnippets = {
-  python: "print('Hello, world!')\n",
-  javascript: "console.log('Hello, world!');\n",
-  php: "<?php\n// your code here\n",
-  cpp: "#include <iostream>\nint main() {\n    std::cout << \"Hello, world!\" << std::endl;\n    return 0;\n}\n",
-  java: "public class Main {\n  public static void main(String[] args) {\n    System.out.println(\"Hello, world!\");\n  }\n}\n",
-  go: "package main\nimport \"fmt\"\nfunc main() {\n    fmt.Println(\"Hello, world!\")\n}\n",
-  ruby: "puts 'Hello, world!'\n",
-  rust: "fn main() {\n    println!(\"Hello, world!\");\n}\n",
-  csharp: "using System;\nclass Program {\n  static void Main() {\n    Console.WriteLine(\"Hello, world!\");\n  }\n}\n",
-  swift: "import Foundation\nprint(\"Hello, world!\")\n"
+  python: "#!/usr/bin/env python3\n\"\"\"\nDescription: [Brief description of what this script does]\nAuthor: [Your name]\nDate: 2025-06-13\n\"\"\"\n\ndef main():\n    # Your code here\n    pass\n\nif __name__ == \"__main__\":\n    main()\n",
+  javascript: "#!/usr/bin/env node\n/**\n * Description: [Brief description of what this script does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\nfunction main() {\n  // Your code here\n}\n\nmain();\n",
+  php: "<?php\n/**\n * Description: [Brief description of what this script does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\nfunction main() {\n    // Your code here\n}\n\nmain();\n",
+  cpp: "#include <iostream>\n\n// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nint main() {\n    // Your code here\n    return 0;\n}\n",
+  java: "/**\n * Description: [Brief description of what this program does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\npublic class Main {\n    public static void main(String[] args) {\n        // Your code here\n    }\n}\n",
+  go: "package main\n\nimport \"fmt\"\n\n// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nfunc main() {\n    // Your code here\n    fmt.Println(\"Hello\")\n}\n",
+  ruby: "#!/usr/bin/env ruby\n# Description: [Brief description of what this script does]\n# Author: [Your name]\n# Date: 2025-06-13\n\ndef main\n  # Your code here\nend\n\nmain if __FILE__ == $PROGRAM_NAME\n",
+  rust: "// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nfn main() {\n    // Your code here\n}\n",
+  csharp: "using System;\n\n/// Description: [Brief description of what this program does]\n/// Author: [Your name]\n/// Date: 2025-06-13\nclass Program\n{\n    static void Main()\n    {\n        // Your code here\n    }\n}\n",
+  swift: "import Foundation\n// Description: [Brief description of what this script does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nfunc main() {\n    // Your code here\n}\n\nmain()\n"
 };
+
 if (templateBtn) {
   templateBtn.addEventListener('click', () => {
     if (templateModal) templateModal.classList.remove('hidden');
