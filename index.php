@@ -6790,7 +6790,7 @@ plt.show()</code></pre>
 
               <button type="button" id="toggleAdvanced" class="text-sm font-medium text-left w-full flex items-center justify-between bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded">
                 <span>⚙️ Advanced Options</span>
-                <span class="ml-2">▼</span>
+                <span id="advArrow" class="ml-2">▲</span>
               </button>
 
               <div id="advancedOptions" class="space-y-6 hidden">
@@ -7099,9 +7099,15 @@ plt.show()</code></pre>
   // Advanced options toggle
   const advToggle = document.getElementById('toggleAdvanced');
   const advSection = document.getElementById('advancedOptions');
-  if (advToggle && advSection) {
+  const advArrow = document.getElementById('advArrow');
+  if (advToggle && advSection && advArrow) {
     advToggle.addEventListener('click', () => {
       advSection.classList.toggle('hidden');
+      if (advSection.classList.contains('hidden')) {
+        advArrow.textContent = '▲';
+      } else {
+        advArrow.textContent = '▼';
+      }
     });
   }
 
