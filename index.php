@@ -20,6 +20,11 @@ $error_handler = new ErrorHandler($audit_logger);
 require_once 'database.php';
 $db = Database::getInstance()->getConnection();
 
+// set a value for $is_flagged_for_blur to prevent error 
+if (!isset($is_flagged_for_blur)) {
+    $is_flagged_for_blur = false;
+}
+
 // Handle logout
 if (isset($_GET['logout'])) {
     $audit_logger->log('user_logout', 'auth', $_SESSION['user_id'] ?? null);
