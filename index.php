@@ -6763,6 +6763,16 @@ plt.show()</code></pre>
             </script>
             <div class="space-y-6">
 
+  <div class="flex justify-between items-center mb-4">
+    <a href="index.php" class="text-blue-500 hover:text-blue-700 font-semibold flex items-center">
+      <i class="fas fa-plus mr-1"></i>Create New Paste
+    </a>
+    <div class="space-x-2">
+      <button type="button" id="loadTemplateBtn" class="border border-gray-300 bg-white dark:bg-gray-700 dark:border-gray-600 px-3 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-600">Load Template</button>
+      <button type="button" id="importBtn" class="border border-gray-300 bg-white dark:bg-gray-700 dark:border-gray-600 px-3 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-600">Import</button>
+      <input type="file" id="importFile" accept=".php,.py,.js,.java,.cpp,.c,.cs,.rb,.go,.ts,.swift,.txt" class="hidden">
+    </div>
+  </div>
 
               <div class="paste-form-element">
                 <label class="block text-sm font-medium mb-2">Title</label>
@@ -6788,10 +6798,16 @@ plt.show()</code></pre>
                 </div>
               </div>
 
-              <div class="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-sm font-medium mb-1">Language:</label>
-                  <select name="language" class="w-full p-2 rounded border dark:bg-gray-700 dark:border-gray-600">
+              <button type="button" id="toggleAdvanced" class="text-sm font-medium text-left w-full flex items-center justify-between bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded">
+                <span>⚙️ Advanced Options</span>
+                <span id="advArrow" class="ml-2">▲</span>
+              </button>
+
+              <div id="advancedOptions" class="space-y-6 hidden">
+                <div class="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Language:</label>
+                    <select name="language" class="w-full p-2 rounded border dark:bg-gray-700 dark:border-gray-600">
                     <option value="plaintext">Plain Text</option>
                     <option value="abap">ABAP</option>
                     <option value="actionscript">ActionScript</option>
@@ -6949,6 +6965,10 @@ plt.show()</code></pre>
                     <option value="3600">1 hour</option>
                     <option value="86400">1 day</option>
                     <option value="604800">1 week</option>
+                    <option value="1209600">2 Weeks</option>
+                    <option value="2592000">1 Month</option>
+                    <option value="15552000">6 Months</option>
+                    <option value="31536000">1 Year</option>
                   </select>
                 </div>
               </div>
@@ -6980,12 +7000,24 @@ plt.show()</code></pre>
 
               <div class="grid md:grid-cols-2 gap-4 paste-form-element">
                 <div>
-                  <label class="flex items-center space-x-2">
-                    <input type="checkbox" name="is_public" checked class="rounded">
-                    <span>Public paste</span>
-                  </label>
+                  <span class="block text-sm font-medium mb-1">Visibility:</span>
+                  <div class="flex items-center space-x-4">
+                    <label class="flex items-center space-x-1">
+                      <input type="radio" name="visibility" value="public" checked class="rounded">
+                      <span>Public</span>
+                    </label>
+                    <label class="flex items-center space-x-1">
+                      <input type="radio" name="visibility" value="unlisted" class="rounded">
+                      <span>Unlisted</span>
+                    </label>
+                    <label class="flex items-center space-x-1">
+                      <input type="radio" name="visibility" value="private" class="rounded">
+                      <span>Private</span>
+                    </label>
+                  </div>
+                  <input type="hidden" name="is_public" id="is_public_hidden" value="1">
                 </div>
-                <div>
+                <div class="mt-5">
                   <label class="flex items-center space-x-2">
                     <input type="checkbox" name="burn_after_read" class="rounded">
                     <span>Burn after reading</span>
@@ -6997,16 +7029,17 @@ plt.show()</code></pre>
                 <label class="block text-sm font-medium mb-2">Password (optional)</label>
                 <input type="password" name="password" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" placeholder="Password protect this paste">
               </div>
-
-              <!-- Hidden input for parent paste ID (for paste chains) -->
-              <input type="hidden" name="parent_paste_id" value="<?php echo htmlspecialchars($_GET['parent_id'] ?? ''); ?>">
-
-              <div class="text-center paste-form-element">
-                <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105">
-                  <i class="fas fa-plus mr-2"></i>Create Paste
-                </button>
-              </div>
             </div>
+
+            <!-- Hidden input for parent paste ID (for paste chains) -->
+            <input type="hidden" name="parent_paste_id" value="<?php echo htmlspecialchars($_GET['parent_id'] ?? ''); ?>">
+
+            <div class="text-center paste-form-element">
+              <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105">
+                <i class="fas fa-plus mr-2"></i>Create Paste
+              </button>
+            </div>
+          </div>
           </form>
           <?php endif; ?>
           <?php endif; ?>
@@ -7014,6 +7047,34 @@ plt.show()</code></pre>
       </div>
     </div>
   </div>
+<!-- Template Modal -->
+<div id="templateModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full">
+    <div class="flex justify-between items-center p-6 border-b dark:border-gray-700">
+      <h3 class="text-lg font-semibold">Load Template</h3>
+      <button onclick="closeTemplateModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+        <i class="fas fa-times text-xl"></i>
+      </button>
+    </div>
+    <div class="p-6 space-y-6">
+      <div id="languageList" class="grid grid-cols-2 gap-3">
+        <button type="button" data-lang="python" class="language-item px-3 py-2 border rounded">Python</button>
+        <button type="button" data-lang="javascript" class="language-item px-3 py-2 border rounded">JavaScript</button>
+        <button type="button" data-lang="php" class="language-item px-3 py-2 border rounded">PHP</button>
+        <button type="button" data-lang="cpp" class="language-item px-3 py-2 border rounded">C++</button>
+        <button type="button" data-lang="java" class="language-item px-3 py-2 border rounded">Java</button>
+        <button type="button" data-lang="go" class="language-item px-3 py-2 border rounded">Go</button>
+        <button type="button" data-lang="ruby" class="language-item px-3 py-2 border rounded">Ruby</button>
+        <button type="button" data-lang="rust" class="language-item px-3 py-2 border rounded">Rust</button>
+        <button type="button" data-lang="csharp" class="language-item px-3 py-2 border rounded">C#</button>
+        <button type="button" data-lang="swift" class="language-item px-3 py-2 border rounded">Swift</button>
+      </div>
+      <div class="text-right">
+        <button type="button" id="loadTemplateConfirm" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">Load</button>
+      </div>
+    </div>
+  </div>
+</div>
 
   <script>
     function editPaste(id) {
@@ -7040,7 +7101,7 @@ plt.show()</code></pre>
       })
     }
 
-    function openCollectionModal() {
+  function openCollectionModal() {
       const modal = document.getElementById('collectionModal');
       if (modal) {
         modal.classList.remove('hidden');
@@ -7068,11 +7129,108 @@ plt.show()</code></pre>
 
     // Close modal with Escape key
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        closeCollectionModal();
+    if (e.key === 'Escape') {
+      closeCollectionModal();
+    }
+  });
+
+  // Advanced options toggle
+  const advToggle = document.getElementById('toggleAdvanced');
+  const advSection = document.getElementById('advancedOptions');
+  const advArrow = document.getElementById('advArrow');
+  if (advToggle && advSection && advArrow) {
+    advToggle.addEventListener('click', () => {
+      advSection.classList.toggle('hidden');
+      if (advSection.classList.contains('hidden')) {
+        advArrow.textContent = '▲';
+      } else {
+        advArrow.textContent = '▼';
       }
     });
+  }
 
+  // Visibility radio -> is_public handling
+  const visibilityRadios = document.querySelectorAll('input[name="visibility"]');
+  const isPublicHidden = document.getElementById('is_public_hidden');
+  visibilityRadios.forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (radio.value === 'private') {
+        isPublicHidden.disabled = true;
+      } else {
+        isPublicHidden.disabled = false;
+      }
+    });
+  });
+
+// Template modal logic
+const templateBtn = document.getElementById("loadTemplateBtn");
+const templateModal = document.getElementById("templateModal");
+const languageItems = document.querySelectorAll("#languageList .language-item");
+const templateLoad = document.getElementById("loadTemplateConfirm");
+let selectedLang = null;
+const templateSnippets = {
+  python: "print('Hello, world!')\n",
+  javascript: "console.log('Hello, world!');\n",
+  php: "<?php\n// your code here\n",
+  cpp: "#include <iostream>\nint main() {\n    std::cout << \"Hello, world!\" << std::endl;\n    return 0;\n}\n",
+  java: "public class Main {\n  public static void main(String[] args) {\n    System.out.println(\"Hello, world!\");\n  }\n}\n",
+  go: "package main\nimport \"fmt\"\nfunc main() {\n    fmt.Println(\"Hello, world!\")\n}\n",
+  ruby: "puts 'Hello, world!'\n",
+  rust: "fn main() {\n    println!(\"Hello, world!\");\n}\n",
+  csharp: "using System;\nclass Program {\n  static void Main() {\n    Console.WriteLine(\"Hello, world!\");\n  }\n}\n",
+  swift: "import Foundation\nprint(\"Hello, world!\")\n"
+};
+if (templateBtn) {
+  templateBtn.addEventListener('click', () => {
+    if (templateModal) templateModal.classList.remove('hidden');
+  });
+}
+if (templateModal) {
+  languageItems.forEach(btn => {
+    btn.addEventListener('click', () => {
+      languageItems.forEach(b => b.classList.remove('bg-blue-500','text-white'));
+      btn.classList.add('bg-blue-500','text-white');
+      selectedLang = btn.dataset.lang;
+    });
+  });
+}
+if (templateLoad) {
+  templateLoad.addEventListener('click', () => {
+    if (!selectedLang) return;
+    const textarea = document.querySelector('textarea[name="content"]');
+    const langSelect = document.querySelector('select[name="language"]');
+    if (textarea) textarea.value = templateSnippets[selectedLang] || '';
+    if (langSelect) langSelect.value = selectedLang;
+    closeTemplateModal();
+  });
+}
+function closeTemplateModal() {
+  if (templateModal) templateModal.classList.add('hidden');
+}
+document.addEventListener('click', e => {
+  if (templateModal && e.target === templateModal) {
+    closeTemplateModal();
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeTemplateModal();
+});
+// Import file logic
+const importBtnEl = document.getElementById("importBtn");
+const importFileInput = document.getElementById("importFile");
+if (importBtnEl && importFileInput) {
+  importBtnEl.addEventListener('click', () => importFileInput.click());
+  importFileInput.addEventListener('change', () => {
+    const file = importFileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const textarea = document.querySelector('textarea[name="content"]');
+      if (textarea) textarea.value = e.target.result;
+    };
+    reader.readAsText(file);
+  });
+}
     // Enhanced Share Modal Functions
     function openEnhancedShareModal(pasteId) {
       fetch('enhanced_paste_share.php', {
