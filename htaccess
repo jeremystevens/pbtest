@@ -1,0 +1,28 @@
+# .htaccess — Basic hardening
+
+# Block sensitive files from being served
+<FilesMatch "^(\.git|\.svn|\.ht|error\.log|README\.md)">
+    Require all denied
+</FilesMatch>
+
+# Block database files
+<FilesMatch "\.(sqlite|db)$">
+    Require all denied
+</FilesMatch>
+
+# Optional: If using older Apache 2.2 servers, fallback syntax:
+# <FilesMatch "^(\.git|\.svn|\.ht|error\.log|README\.md)">
+#    Order allow,deny
+#    Deny from all
+# </FilesMatch>
+
+# Optional: prevent directory listing
+Options -Indexes
+
+# Optional: Add basic security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "no-referrer-when-downgrade"
+</IfModule>
