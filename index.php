@@ -151,13 +151,13 @@ function human_time_diff($timestamp) {
     if ($diff < 60) return 'just now';
     if ($diff < 3600) return floor($diff / 60) . ' minutes ago';
     if ($diff < 86400) return floor($diff / 3600) . ' hours ago';
-    
+
     $days = floor($diff / 86400);
     if ($days < 30) return $days . ' days ago';
-    
+
     $months = floor($days / 30);
     if ($months < 12) return $months . ' month' . ($months > 1 ? 's' : '') . ' ago';
-    
+
     $years = floor($months / 12);
     return $years . ' year' . ($years > 1 ? 's' : '') . ' ago';
 }
@@ -4413,7 +4413,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
               header('Location: /?page=login');
               exit;
             }
-            
+
             // Include the account page
             include 'account.php';
             ?>
@@ -6763,6 +6763,16 @@ plt.show()</code></pre>
             </script>
             <div class="space-y-6">
 
+  <div class="flex justify-between items-center mb-4">
+    <a href="index.php" class="text-blue-500 hover:text-blue-700 font-semibold flex items-center">
+      <i class="fas fa-plus mr-1"></i>Create New Paste
+    </a>
+    <div class="space-x-2">
+      <button type="button" id="loadTemplateBtn" class="border border-gray-300 bg-white dark:bg-gray-700 dark:border-gray-600 px-3 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-600">Load Template</button>
+      <button type="button" id="importBtn" class="border border-gray-300 bg-white dark:bg-gray-700 dark:border-gray-600 px-3 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-600">Import</button>
+      <input type="file" id="importFile" accept=".php,.py,.js,.java,.cpp,.c,.cs,.rb,.go,.ts,.swift,.txt" class="hidden">
+    </div>
+  </div>
 
               <div class="paste-form-element">
                 <label class="block text-sm font-medium mb-2">Title</label>
@@ -7037,6 +7047,34 @@ plt.show()</code></pre>
       </div>
     </div>
   </div>
+<!-- Template Modal -->
+<div id="templateModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full">
+    <div class="flex justify-between items-center p-6 border-b dark:border-gray-700">
+      <h3 class="text-lg font-semibold">Load Template</h3>
+      <button onclick="closeTemplateModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+        <i class="fas fa-times text-xl"></i>
+      </button>
+    </div>
+    <div class="p-6 space-y-6">
+      <div id="languageList" class="grid grid-cols-2 gap-3">
+        <button type="button" data-lang="python" class="language-item px-3 py-2 border rounded">Python</button>
+        <button type="button" data-lang="javascript" class="language-item px-3 py-2 border rounded">JavaScript</button>
+        <button type="button" data-lang="php" class="language-item px-3 py-2 border rounded">PHP</button>
+        <button type="button" data-lang="cpp" class="language-item px-3 py-2 border rounded">C++</button>
+        <button type="button" data-lang="java" class="language-item px-3 py-2 border rounded">Java</button>
+        <button type="button" data-lang="go" class="language-item px-3 py-2 border rounded">Go</button>
+        <button type="button" data-lang="ruby" class="language-item px-3 py-2 border rounded">Ruby</button>
+        <button type="button" data-lang="rust" class="language-item px-3 py-2 border rounded">Rust</button>
+        <button type="button" data-lang="csharp" class="language-item px-3 py-2 border rounded">C#</button>
+        <button type="button" data-lang="swift" class="language-item px-3 py-2 border rounded">Swift</button>
+      </div>
+      <div class="text-right">
+        <button type="button" id="loadTemplateConfirm" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">Load</button>
+      </div>
+    </div>
+  </div>
+</div>
 
   <script>
     function editPaste(id) {
@@ -7124,6 +7162,76 @@ plt.show()</code></pre>
     });
   });
 
+// Template modal logic
+const templateBtn = document.getElementById("loadTemplateBtn");
+const templateModal = document.getElementById("templateModal");
+const languageItems = document.querySelectorAll("#languageList .language-item");
+const templateLoad = document.getElementById("loadTemplateConfirm");
+let selectedLang = null;
+const templateSnippets = {
+  python: "#!/usr/bin/env python3\n\"\"\"\nDescription: [Brief description of what this script does]\nAuthor: [Your name]\nDate: 2025-06-13\n\"\"\"\n\ndef main():\n    # Your code here\n    pass\n\nif __name__ == \"__main__\":\n    main()\n",
+  javascript: "#!/usr/bin/env node\n/**\n * Description: [Brief description of what this script does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\nfunction main() {\n  // Your code here\n}\n\nmain();\n",
+   php: "<" + "?php\n/**\n * Description: [Brief description of what this script does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\nfunction main() {\n    // Your code here\n}\n\nmain();\n",
+  cpp: "#include <iostream>\n\n// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nint main() {\n    // Your code here\n    return 0;\n}\n",
+  java: "/**\n * Description: [Brief description of what this program does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\npublic class Main {\n    public static void main(String[] args) {\n        // Your code here\n    }\n}\n",
+  go: "package main\n\nimport \"fmt\"\n\n// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nfunc main() {\n    // Your code here\n    fmt.Println(\"Hello\")\n}\n",
+  ruby: "#!/usr/bin/env ruby\n# Description: [Brief description of what this script does]\n# Author: [Your name]\n# Date: 2025-06-13\n\ndef main\n  # Your code here\nend\n\nmain if __FILE__ == $PROGRAM_NAME\n",
+  rust: "// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nfn main() {\n    // Your code here\n}\n",
+  csharp: "using System;\n\n/// Description: [Brief description of what this program does]\n/// Author: [Your name]\n/// Date: 2025-06-13\nclass Program\n{\n    static void Main()\n    {\n        // Your code here\n    }\n}\n",
+  swift: "import Foundation\n// Description: [Brief description of what this script does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nfunc main() {\n    // Your code here\n}\n\nmain()\n"
+};
+
+if (templateBtn) {
+  templateBtn.addEventListener('click', () => {
+    if (templateModal) templateModal.classList.remove('hidden');
+  });
+}
+if (templateModal) {
+  languageItems.forEach(btn => {
+    btn.addEventListener('click', () => {
+      languageItems.forEach(b => b.classList.remove('bg-blue-500','text-white'));
+      btn.classList.add('bg-blue-500','text-white');
+      selectedLang = btn.dataset.lang;
+    });
+  });
+}
+if (templateLoad) {
+  templateLoad.addEventListener('click', () => {
+    if (!selectedLang) return;
+    const textarea = document.querySelector('textarea[name="content"]');
+    const langSelect = document.querySelector('select[name="language"]');
+    if (textarea) textarea.value = templateSnippets[selectedLang] || '';
+    if (langSelect) langSelect.value = selectedLang;
+    closeTemplateModal();
+  });
+}
+function closeTemplateModal() {
+  if (templateModal) templateModal.classList.add('hidden');
+}
+document.addEventListener('click', e => {
+  if (templateModal && e.target === templateModal) {
+    closeTemplateModal();
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeTemplateModal();
+});
+// Import file logic
+const importBtnEl = document.getElementById("importBtn");
+const importFileInput = document.getElementById("importFile");
+if (importBtnEl && importFileInput) {
+  importBtnEl.addEventListener('click', () => importFileInput.click());
+  importFileInput.addEventListener('change', () => {
+    const file = importFileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const textarea = document.querySelector('textarea[name="content"]');
+      if (textarea) textarea.value = e.target.result;
+    };
+    reader.readAsText(file);
+  });
+}
     // Enhanced Share Modal Functions
     function openEnhancedShareModal(pasteId) {
       fetch('enhanced_paste_share.php', {
