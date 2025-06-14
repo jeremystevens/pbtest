@@ -326,7 +326,8 @@ try {
     tags TEXT DEFAULT '',
     views INTEGER DEFAULT 0,
     user_id TEXT,
-    burn_after_read BOOLEAN DEFAULT 0
+    burn_after_read BOOLEAN DEFAULT 0,
+    zero_knowledge INTEGER DEFAULT 0
   )");
 
   // Add table for tracking unique views
@@ -351,6 +352,9 @@ try {
   }
   if (!in_array('collection_id', $columns)) {
     $db->exec("ALTER TABLE pastes ADD COLUMN collection_id INTEGER DEFAULT NULL");
+  }
+  if (!in_array('zero_knowledge', $columns)) {
+    $db->exec("ALTER TABLE pastes ADD COLUMN zero_knowledge INTEGER DEFAULT 0");
   }
 
 
@@ -1245,8 +1249,8 @@ if __name__ == "__main__":
 
       try {
         $stmt = $db->prepare(
-          "INSERT INTO pastes (title, content, language, password, expire_time, is_public, tags, user_id, created_at, burn_after_read, current_version, last_modified, collection_id, original_paste_id, parent_paste_id) 
-           VALUES (:title, :content, :language, :password, :expire_time, :is_public, :tags, :user_id, :created_at, :burn_after_read, 1, :created_at, :collection_id, :original_paste_id, :parent_paste_id)"
+          "INSERT INTO pastes (title, content, language, password, expire_time, is_public, tags, user_id, created_at, burn_after_read, zero_knowledge, current_version, last_modified, collection_id, original_paste_id, parent_paste_id)
+           VALUES (:title, :content, :language, :password, :expire_time, :is_public, :tags, :user_id, :created_at, :burn_after_read, :zero_knowledge, 1, :created_at, :collection_id, :original_paste_id, :parent_paste_id)"
         );
 
       $expire_time = null;
@@ -1283,6 +1287,7 @@ if __name__ == "__main__":
         ':user_id' => $user_id,
         ':created_at' => time(),
         ':burn_after_read' => isset($_POST['burn_after_read']) ? 1 : 0,
+        ':zero_knowledge' => isset($_POST['zero_knowledge']) ? 1 : 0,
         ':collection_id' => !empty($_POST['collection_id']) ? $_POST['collection_id'] : null,
         ':original_paste_id' => !empty($original_paste_id) ? $original_paste_id : null,
         ':parent_paste_id' => !empty($_POST['parent_paste_id']) ? $_POST['parent_paste_id'] : null
@@ -1364,7 +1369,8 @@ if __name__ == "__main__":
        password = :password,
        expire_time = :expire_time,
        is_public = :is_public,
-       tags = :tags
+       tags = :tags,
+       zero_knowledge = :zero_knowledge
        WHERE id = :id AND user_id = :user_id"
     );
 
@@ -1384,6 +1390,7 @@ if __name__ == "__main__":
       ':expire_time' => $expire_time,
       ':is_public' => isset($_POST['is_public']) ? 1 : 0,
       ':tags' => $tags,
+      ':zero_knowledge' => isset($_POST['zero_knowledge']) ? 1 : 0,
       ':id' => $_POST['id'],
       ':user_id' => $user_id
     ]);
@@ -2255,13 +2262,13 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                         <button onclick="copyText(document.querySelector('pre code')?.textContent)" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" title="Copy code">
                           <i class="fas fa-copy text-sm"></i>
                         </button>
-                        <a href="?id=<?= $paste['id'] ?>&raw=1" target="_blank" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 inline-flex transition-colors" title="View raw">
+                        <a href="?id=<?= $paste['id'] ?>&raw=1" target="_blank" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 inline-flex transition-colors zk-restricted<?= $paste['zero_knowledge'] ? ' hidden' : '' ?>" title="View raw">
                           <i class="fas fa-code text-sm"></i>
                         </a>
-                        <a href="?id=<?= $paste['id'] ?>&download=1" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 inline-flex transition-colors" title="Download">
+                        <a href="?id=<?= $paste['id'] ?>&download=1" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 inline-flex transition-colors zk-restricted<?= $paste['zero_knowledge'] ? ' hidden' : '' ?>" title="Download">
                           <i class="fas fa-download text-sm"></i>
                         </a>
-                        <button onclick="clonePaste()" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" title="Clone">
+                        <button onclick="clonePaste()" class="p-2 rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors zk-restricted<?= $paste['zero_knowledge'] ? ' hidden' : '' ?>" title="Clone">
                           <i class="fas fa-clone text-sm"></i>
                         </button>
                       <?php endif; ?>
@@ -2280,7 +2287,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                         }
                         ?>
                         <?php if (!$already_forked): ?>
-                          <button onclick="forkPaste(<?= $paste['id'] ?>)" class="p-2 rounded bg-purple-500 text-white hover:bg-purple-600 transition-colors" title="Fork">
+                          <button onclick="forkPaste(<?= $paste['id'] ?>)" class="p-2 rounded bg-purple-500 text-white hover:bg-purple-600 transition-colors zk-restricted<?= $paste['zero_knowledge'] ? ' hidden' : '' ?>" title="Fork">
                             <i class="fas fa-code-branch text-sm"></i>
                           </button>
                         <?php endif; ?>
@@ -2326,7 +2333,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       <i class="fas fa-code-branch mr-2"></i>Forks <span class="ml-1 px-2 py-0.5 bg-gray-200 dark:bg-gray-600 rounded-full text-xs"><?= $fork_count ?></span>
                     </button>
                   <?php endif; ?>
-                  <button onclick="switchPasteTab('comments')" id="paste-tab-comments" class="paste-tab px-6 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 transition-all duration-200" role="tab">
+                  <button onclick="switchPasteTab('comments')" id="paste-tab-comments" class="paste-tab px-6 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 transition-all duration-200 zk-restricted<?= $paste['zero_knowledge'] ? ' hidden' : '' ?>" role="tab">
                     <i class="fas fa-comment mr-2"></i>Comments <span class="ml-1 px-2 py-0.5 bg-gray-200 dark:bg-gray-600 rounded-full text-xs"><?= $comment_count ?></span>
                   </button>
                   <?php
@@ -2335,7 +2342,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                   $stmt->execute([$paste['id']]);
                   $discussion_count = $stmt->fetchColumn();
                   ?>
-                  <button onclick="switchPasteTab('discussions')" id="paste-tab-discussions" class="paste-tab px-6 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 transition-all duration-200" role="tab">
+                  <button onclick="switchPasteTab('discussions')" id="paste-tab-discussions" class="paste-tab px-6 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300 transition-all duration-200 zk-restricted<?= $paste['zero_knowledge'] ? ' hidden' : '' ?>" role="tab">
                     <i class="fas fa-comments mr-2"></i>Discussions <span class="ml-1 px-2 py-0.5 bg-gray-200 dark:bg-gray-600 rounded-full text-xs"><?= $discussion_count ?></span>
                   </button>
                 </nav>
@@ -2444,6 +2451,14 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                             <div class="mt-4 text-gray-600 dark:text-gray-400">
                               <p class="text-sm">If you believe this is an error, please contact support.</p>
                             </div>
+                          </div>
+                        <?php elseif ($paste['zero_knowledge']): ?>
+                          <div id="zkBanner" class="bg-yellow-100 dark:bg-yellow-900 p-4 rounded mb-2 text-center text-sm">
+                            This is a Zero-Knowledge Paste. Only users with the full link can decrypt it.
+                            <div id="zkPrivateLink" class="mt-2 break-words"></div>
+                          </div>
+                          <div class="bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden">
+                            <pre id="zkContent" class="p-4 whitespace-pre-wrap break-words" style="font-family: monospace;"></pre>
                           </div>
                         <?php else: ?>
                           <!-- Normal content display -->
@@ -2782,7 +2797,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                 <?php endif; ?>
 
                 <!-- Discussions Tab -->
-                <div id="paste-content-discussions" class="tab-content hidden" role="tabpanel">
+                <div id="paste-content-discussions" class="tab-content hidden zk-restricted<?= $paste['zero_knowledge'] ? ' hidden' : '' ?>" role="tabpanel">
                   <div class="space-y-6">
                     <div class="flex justify-between items-center">
                       <h3 class="text-lg font-medium">
@@ -3076,7 +3091,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                 </div>
 
                 <!-- Comments Tab -->
-                <div id="paste-content-comments" class="tab-content hidden" role="tabpanel">
+                <div id="paste-content-comments" class="tab-content hidden zk-restricted<?= $paste['zero_knowledge'] ? ' hidden' : '' ?>" role="tabpanel">
                   <div class="space-y-6">
                     <h3 class="text-lg font-medium">
                       <i class="fas fa-comment mr-2 text-green-500"></i>Comments (<?= $comment_count ?>)
@@ -3469,7 +3484,17 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                 document.body.innerHTML = printContent;
               }
 
-              function forkPaste(pasteId) {
+      function forkPaste(pasteId) {
+        <?php if ($paste['zero_knowledge']): ?>
+          if (!window.pasteDecrypted) {
+            Swal.fire({
+              icon: 'warning',
+              title: 'Action Disabled',
+              text: 'This action is disabled for encrypted pastes. Please provide the decryption key first.'
+            });
+            return;
+          }
+        <?php endif; ?>
         <?php if (!$user_id): ?>
           // For anonymous users: store fork data and redirect to create form
           Swal.fire({
@@ -3533,6 +3558,16 @@ $theme = $_COOKIE['theme'] ?? 'dark';
       }
 
       function clonePaste() {
+                <?php if ($paste['zero_knowledge']): ?>
+                  if (!window.pasteDecrypted) {
+                    Swal.fire({
+                      icon: 'warning',
+                      title: 'Action Disabled',
+                      text: 'This action is disabled for encrypted pastes. Please provide the decryption key first.'
+                    });
+                    return;
+                  }
+                <?php endif; ?>
                 <?php if ($is_flagged_for_blur): ?>
                   Swal.fire({
                     icon: 'warning',
@@ -6616,7 +6651,7 @@ plt.show()</code></pre>
               </script>
             </div>
           <?php elseif (!isset($_GET['page']) || $_GET['page'] === 'home'): ?>
-          <form method="POST" class="box paste-box bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 animate-fade-in" onsubmit="return validatePasteForm(event)">
+          <form method="POST" id="createPasteForm" class="box paste-box bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 animate-fade-in" onsubmit="return handlePasteSubmit(event)">
             <script>
               // Paste validation settings from PHP
               const maxPasteSize = <?= SiteSettings::get('max_paste_size', 0) ?>;
@@ -6661,6 +6696,37 @@ plt.show()</code></pre>
                 }
                 <?php endif; ?>
 
+                return true;
+              }
+
+              let zkKey = null;
+              let zkEncrypted = false;
+
+              async function encryptContent() {
+                const textarea = document.querySelector('textarea[name="content"]');
+                if (!textarea || zkEncrypted || !textarea.value.trim()) return;
+                const data = new TextEncoder().encode(textarea.value);
+                const keyBytes = window.crypto.getRandomValues(new Uint8Array(32));
+                const iv = window.crypto.getRandomValues(new Uint8Array(12));
+                const cryptoKey = await window.crypto.subtle.importKey('raw', keyBytes, {name: 'AES-GCM'}, false, ['encrypt']);
+                const encrypted = await window.crypto.subtle.encrypt({name: 'AES-GCM', iv}, cryptoKey, data);
+                const combined = new Uint8Array(iv.byteLength + encrypted.byteLength);
+                combined.set(iv, 0);
+                combined.set(new Uint8Array(encrypted), iv.byteLength);
+                textarea.value = btoa(String.fromCharCode(...combined));
+                zkKey = btoa(String.fromCharCode(...keyBytes));
+                zkEncrypted = true;
+                sessionStorage.setItem('zkKey', zkKey);
+              }
+
+              function handlePasteSubmit(event) {
+                const valid = validatePasteForm(event);
+                if (!valid) return false;
+
+                const zkBox = document.getElementById('zeroKnowledge');
+                if (zkBox && zkBox.checked && zkKey) {
+                  sessionStorage.setItem('zkKey', zkKey);
+                }
                 return true;
               }
 
@@ -6758,11 +6824,27 @@ plt.show()</code></pre>
                 if (contentTextarea) {
                   updateContentStats();
                   contentTextarea.addEventListener('input', updateContentStats);
+                  contentTextarea.addEventListener('blur', () => {
+                    const zkBox = document.getElementById('zeroKnowledge');
+                    if (zkBox && zkBox.checked) {
+                      encryptContent();
+                    }
+                  });
                 }
               });
             </script>
             <div class="space-y-6">
 
+  <div class="flex justify-between items-center mb-4">
+    <a href="index.php" class="text-blue-500 hover:text-blue-700 font-semibold flex items-center">
+      <i class="fas fa-plus mr-1"></i>Create New Paste
+    </a>
+    <div class="space-x-2">
+      <button type="button" id="loadTemplateBtn" class="border border-gray-300 bg-white dark:bg-gray-700 dark:border-gray-600 px-3 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-600">Load Template</button>
+      <button type="button" id="importBtn" class="border border-gray-300 bg-white dark:bg-gray-700 dark:border-gray-600 px-3 py-1 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-600">Import</button>
+      <input type="file" id="importFile" accept=".php,.py,.js,.java,.cpp,.c,.cs,.rb,.go,.ts,.swift,.txt" class="hidden">
+    </div>
+  </div>
 
               <div class="paste-form-element">
                 <label class="block text-sm font-medium mb-2">Title</label>
@@ -6788,10 +6870,16 @@ plt.show()</code></pre>
                 </div>
               </div>
 
-              <div class="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-sm font-medium mb-1">Language:</label>
-                  <select name="language" class="w-full p-2 rounded border dark:bg-gray-700 dark:border-gray-600">
+              <button type="button" id="toggleAdvanced" class="text-sm font-medium text-left w-full flex items-center justify-between bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded">
+                <span>⚙️ Advanced Options</span>
+                <span id="advArrow" class="ml-2">▲</span>
+              </button>
+
+              <div id="advancedOptions" class="space-y-6 hidden">
+                <div class="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium mb-1">Language:</label>
+                    <select name="language" class="w-full p-2 rounded border dark:bg-gray-700 dark:border-gray-600">
                     <option value="plaintext">Plain Text</option>
                     <option value="abap">ABAP</option>
                     <option value="actionscript">ActionScript</option>
@@ -6949,6 +7037,10 @@ plt.show()</code></pre>
                     <option value="3600">1 hour</option>
                     <option value="86400">1 day</option>
                     <option value="604800">1 week</option>
+                    <option value="1209600">2 Weeks</option>
+                    <option value="2592000">1 Month</option>
+                    <option value="15552000">6 Months</option>
+                    <option value="31536000">1 Year</option>
                   </select>
                 </div>
               </div>
@@ -6980,12 +7072,24 @@ plt.show()</code></pre>
 
               <div class="grid md:grid-cols-2 gap-4 paste-form-element">
                 <div>
-                  <label class="flex items-center space-x-2">
-                    <input type="checkbox" name="is_public" checked class="rounded">
-                    <span>Public paste</span>
-                  </label>
+                  <span class="block text-sm font-medium mb-1">Visibility:</span>
+                  <div class="flex items-center space-x-4">
+                    <label class="flex items-center space-x-1">
+                      <input type="radio" name="visibility" value="public" checked class="rounded">
+                      <span>Public</span>
+                    </label>
+                    <label class="flex items-center space-x-1">
+                      <input type="radio" name="visibility" value="unlisted" class="rounded">
+                      <span>Unlisted</span>
+                    </label>
+                    <label class="flex items-center space-x-1">
+                      <input type="radio" name="visibility" value="private" class="rounded">
+                      <span>Private</span>
+                    </label>
+                  </div>
+                  <input type="hidden" name="is_public" id="is_public_hidden" value="1">
                 </div>
-                <div>
+                <div class="flex items-center mt-6">
                   <label class="flex items-center space-x-2">
                     <input type="checkbox" name="burn_after_read" class="rounded">
                     <span>Burn after reading</span>
@@ -6998,15 +7102,24 @@ plt.show()</code></pre>
                 <input type="password" name="password" class="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700" placeholder="Password protect this paste">
               </div>
 
-              <!-- Hidden input for parent paste ID (for paste chains) -->
-              <input type="hidden" name="parent_paste_id" value="<?php echo htmlspecialchars($_GET['parent_id'] ?? ''); ?>">
-
-              <div class="text-center paste-form-element">
-                <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105">
-                  <i class="fas fa-plus mr-2"></i>Create Paste
-                </button>
+              <div class="paste-form-element">
+                <label class="flex items-center space-x-2">
+                  <input type="checkbox" name="zero_knowledge" id="zeroKnowledge" class="rounded">
+                  <span>🔐 Make this a Zero-Knowledge Paste</span>
+                </label>
+                <p class="text-xs text-gray-500 mt-1">If you lose this link, the paste cannot be recovered.</p>
               </div>
             </div>
+
+            <!-- Hidden input for parent paste ID (for paste chains) -->
+            <input type="hidden" name="parent_paste_id" value="<?php echo htmlspecialchars($_GET['parent_id'] ?? ''); ?>">
+
+            <div class="text-center paste-form-element">
+              <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105">
+                <i class="fas fa-plus mr-2"></i>Create Paste
+              </button>
+            </div>
+          </div>
           </form>
           <?php endif; ?>
           <?php endif; ?>
@@ -7014,6 +7127,34 @@ plt.show()</code></pre>
       </div>
     </div>
   </div>
+<!-- Template Modal -->
+<div id="templateModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full">
+    <div class="flex justify-between items-center p-6 border-b dark:border-gray-700">
+      <h3 class="text-lg font-semibold">Load Template</h3>
+      <button onclick="closeTemplateModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+        <i class="fas fa-times text-xl"></i>
+      </button>
+    </div>
+    <div class="p-6 space-y-6">
+      <div id="languageList" class="grid grid-cols-2 gap-3">
+        <button type="button" data-lang="python" class="language-item px-3 py-2 border rounded">Python</button>
+        <button type="button" data-lang="javascript" class="language-item px-3 py-2 border rounded">JavaScript</button>
+        <button type="button" data-lang="php" class="language-item px-3 py-2 border rounded">PHP</button>
+        <button type="button" data-lang="cpp" class="language-item px-3 py-2 border rounded">C++</button>
+        <button type="button" data-lang="java" class="language-item px-3 py-2 border rounded">Java</button>
+        <button type="button" data-lang="go" class="language-item px-3 py-2 border rounded">Go</button>
+        <button type="button" data-lang="ruby" class="language-item px-3 py-2 border rounded">Ruby</button>
+        <button type="button" data-lang="rust" class="language-item px-3 py-2 border rounded">Rust</button>
+        <button type="button" data-lang="csharp" class="language-item px-3 py-2 border rounded">C#</button>
+        <button type="button" data-lang="swift" class="language-item px-3 py-2 border rounded">Swift</button>
+      </div>
+      <div class="text-right">
+        <button type="button" id="loadTemplateConfirm" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">Load</button>
+      </div>
+    </div>
+  </div>
+</div>
 
   <script>
     function editPaste(id) {
@@ -7040,7 +7181,7 @@ plt.show()</code></pre>
       })
     }
 
-    function openCollectionModal() {
+  function openCollectionModal() {
       const modal = document.getElementById('collectionModal');
       if (modal) {
         modal.classList.remove('hidden');
@@ -7068,11 +7209,109 @@ plt.show()</code></pre>
 
     // Close modal with Escape key
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        closeCollectionModal();
+    if (e.key === 'Escape') {
+      closeCollectionModal();
+    }
+  });
+
+  // Advanced options toggle
+  const advToggle = document.getElementById('toggleAdvanced');
+  const advSection = document.getElementById('advancedOptions');
+  const advArrow = document.getElementById('advArrow');
+  if (advToggle && advSection && advArrow) {
+    advToggle.addEventListener('click', () => {
+      advSection.classList.toggle('hidden');
+      if (advSection.classList.contains('hidden')) {
+        advArrow.textContent = '▲';
+      } else {
+        advArrow.textContent = '▼';
       }
     });
+  }
 
+  // Visibility radio -> is_public handling
+  const visibilityRadios = document.querySelectorAll('input[name="visibility"]');
+  const isPublicHidden = document.getElementById('is_public_hidden');
+  visibilityRadios.forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (radio.value === 'private') {
+        isPublicHidden.disabled = true;
+      } else {
+        isPublicHidden.disabled = false;
+      }
+    });
+  });
+
+// Template modal logic
+const templateBtn = document.getElementById("loadTemplateBtn");
+const templateModal = document.getElementById("templateModal");
+const languageItems = document.querySelectorAll("#languageList .language-item");
+const templateLoad = document.getElementById("loadTemplateConfirm");
+let selectedLang = null;
+const templateSnippets = {
+  python: "#!/usr/bin/env python3\n\"\"\"\nDescription: [Brief description of what this script does]\nAuthor: [Your name]\nDate: 2025-06-13\n\"\"\"\n\ndef main():\n    # Your code here\n    pass\n\nif __name__ == \"__main__\":\n    main()\n",
+  javascript: "#!/usr/bin/env node\n/**\n * Description: [Brief description of what this script does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\nfunction main() {\n  // Your code here\n}\n\nmain();\n",
+  php: "<" + "?php\n/**\n * Description: [Brief description of what this script does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\nfunction main() {\n    // Your code here\n}\n\nmain();\n",
+  cpp: "#include <iostream>\n\n// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nint main() {\n    // Your code here\n    return 0;\n}\n",
+  java: "/**\n * Description: [Brief description of what this program does]\n * Author: [Your name]\n * Date: 2025-06-13\n */\npublic class Main {\n    public static void main(String[] args) {\n        // Your code here\n    }\n}\n",
+  go: "package main\n\nimport \"fmt\"\n\n// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nfunc main() {\n    // Your code here\n    fmt.Println(\"Hello\")\n}\n",
+  ruby: "#!/usr/bin/env ruby\n# Description: [Brief description of what this script does]\n# Author: [Your name]\n# Date: 2025-06-13\n\ndef main\n  # Your code here\nend\n\nmain if __FILE__ == $PROGRAM_NAME\n",
+  rust: "// Description: [Brief description of what this program does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nfn main() {\n    // Your code here\n}\n",
+  csharp: "using System;\n\n/// Description: [Brief description of what this program does]\n/// Author: [Your name]\n/// Date: 2025-06-13\nclass Program\n{\n    static void Main()\n    {\n        // Your code here\n    }\n}\n",
+  swift: "import Foundation\n// Description: [Brief description of what this script does]\n// Author: [Your name]\n// Date: 2025-06-13\n\nfunc main() {\n    // Your code here\n}\n\nmain()\n"
+};
+
+if (templateBtn) {
+  templateBtn.addEventListener('click', () => {
+    if (templateModal) templateModal.classList.remove('hidden');
+  });
+}
+if (templateModal) {
+  languageItems.forEach(btn => {
+    btn.addEventListener('click', () => {
+      languageItems.forEach(b => b.classList.remove('bg-blue-500','text-white'));
+      btn.classList.add('bg-blue-500','text-white');
+      selectedLang = btn.dataset.lang;
+    });
+  });
+}
+if (templateLoad) {
+  templateLoad.addEventListener('click', () => {
+    if (!selectedLang) return;
+    const textarea = document.querySelector('textarea[name="content"]');
+    const langSelect = document.querySelector('select[name="language"]');
+    if (textarea) textarea.value = templateSnippets[selectedLang] || '';
+    if (langSelect) langSelect.value = selectedLang;
+    closeTemplateModal();
+  });
+}
+function closeTemplateModal() {
+  if (templateModal) templateModal.classList.add('hidden');
+}
+document.addEventListener('click', e => {
+  if (templateModal && e.target === templateModal) {
+    closeTemplateModal();
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeTemplateModal();
+});
+// Import file logic
+const importBtnEl = document.getElementById("importBtn");
+const importFileInput = document.getElementById("importFile");
+if (importBtnEl && importFileInput) {
+  importBtnEl.addEventListener('click', () => importFileInput.click());
+  importFileInput.addEventListener('change', () => {
+    const file = importFileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const textarea = document.querySelector('textarea[name="content"]');
+      if (textarea) textarea.value = e.target.result;
+    };
+    reader.readAsText(file);
+  });
+}
     // Enhanced Share Modal Functions
     function openEnhancedShareModal(pasteId) {
       fetch('enhanced_paste_share.php', {
@@ -7894,6 +8133,7 @@ plt.show()</code></pre>
 
     // Auto-expand all replies on page load
     document.addEventListener('DOMContentLoaded', function() {
+      window.pasteDecrypted = false;
       // Show all replies by default
       document.querySelectorAll('[id^="replies-"]').forEach(function(element) {
         element.classList.remove('hidden');
@@ -7912,6 +8152,45 @@ plt.show()</code></pre>
 
       // Initialize countdown timers
       initializeCountdownTimers();
+
+      <?php if (isset($paste) && $paste['zero_knowledge']): ?>
+      (async function() {
+        let match = window.location.hash.match(/key=([^&]+)/);
+        const container = document.getElementById('zkContent');
+        const banner = document.getElementById('zkPrivateLink');
+        if (!container) return;
+        if (!match) {
+          const stored = sessionStorage.getItem('zkKey');
+          if (stored) {
+            window.location.hash = 'key=' + encodeURIComponent(stored);
+            match = ['#key=' + stored, stored];
+            sessionStorage.removeItem('zkKey');
+          }
+        }
+        if (!match) {
+          container.textContent = 'This paste is encrypted. You must access it using the original link that includes the key.';
+          return;
+        }
+        try {
+          const keyBytes = Uint8Array.from(atob(decodeURIComponent(match[1])), c => c.charCodeAt(0));
+          const encData = Uint8Array.from(atob("<?= htmlspecialchars($paste['content'], ENT_QUOTES) ?>"), c => c.charCodeAt(0));
+          const iv = encData.slice(0,12);
+          const cipher = encData.slice(12);
+          const key = await crypto.subtle.importKey('raw', keyBytes, {name:'AES-GCM'}, false, ['decrypt']);
+          const decrypted = await crypto.subtle.decrypt({name:'AES-GCM', iv}, key, cipher);
+          container.textContent = new TextDecoder().decode(decrypted);
+          if (banner) {
+            const fullLink = window.location.href;
+            banner.innerHTML = `<strong>Private Link:</strong> <a href="${fullLink}" class="underline break-all">${fullLink}</a><br><em>Save this link — without the key, this paste cannot be recovered.</em>`;
+          }
+          if (window.Prism) Prism.highlightAllUnder(container.parentElement);
+          window.pasteDecrypted = true;
+          document.querySelectorAll('.zk-restricted').forEach(el => el.classList.remove('hidden'));
+        } catch (e) {
+          container.textContent = 'Failed to decrypt paste. The key may be invalid.';
+        }
+      })();
+      <?php endif; ?>
     });
 
     // Countdown timer functionality
