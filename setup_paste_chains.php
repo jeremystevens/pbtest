@@ -37,6 +37,7 @@ try {
         user_id TEXT,
         views INTEGER DEFAULT 0,
         burn_after_read BOOLEAN DEFAULT 0,
+        zero_knowledge INTEGER DEFAULT 0,
         current_version INTEGER DEFAULT 1,
         last_modified INTEGER,
         flags INTEGER DEFAULT 0,
