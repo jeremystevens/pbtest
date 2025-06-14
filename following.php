@@ -79,7 +79,7 @@ if ($tab === 'following') {
                uf.created_at as followed_at
         FROM user_follows uf 
         JOIN users u ON uf.following_id = u.id
-        LEFT JOIN pastes p ON u.id = p.user_id AND p.is_public = 1
+        LEFT JOIN pastes p ON u.id = p.user_id AND p.is_public = 1 AND p.zero_knowledge = 0
         WHERE uf.follower_id = ?
         GROUP BY u.id, u.username, u.profile_image, u.tagline, uf.created_at
         ORDER BY uf.created_at DESC
@@ -97,7 +97,7 @@ if ($tab === 'followers') {
                uf.created_at as followed_at
         FROM user_follows uf 
         JOIN users u ON uf.follower_id = u.id
-        LEFT JOIN pastes p ON u.id = p.user_id AND p.is_public = 1
+        LEFT JOIN pastes p ON u.id = p.user_id AND p.is_public = 1 AND p.zero_knowledge = 0
         WHERE uf.following_id = ?
         GROUP BY u.id, u.username, u.profile_image, u.tagline, uf.created_at
         ORDER BY uf.created_at DESC
@@ -114,7 +114,7 @@ if ($tab === 'discover') {
                COUNT(p.id) as paste_count,
                u.followers_count
         FROM users u
-        LEFT JOIN pastes p ON u.id = p.user_id AND p.is_public = 1
+        LEFT JOIN pastes p ON u.id = p.user_id AND p.is_public = 1 AND p.zero_knowledge = 0
         WHERE u.id != ? 
         AND u.id NOT IN (SELECT following_id FROM user_follows WHERE follower_id = ?)
         GROUP BY u.id, u.username, u.profile_image, u.tagline, u.followers_count
