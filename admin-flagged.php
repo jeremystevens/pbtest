@@ -44,6 +44,13 @@ $db->exec("CREATE TABLE IF NOT EXISTS user_warnings (
     FOREIGN KEY(admin_id) REFERENCES admin_users(id)
 )");
 
+// Add status column to pastes table if it doesn't exist
+try {
+    $db->exec("ALTER TABLE pastes ADD COLUMN status TEXT DEFAULT 'active'");
+} catch (PDOException $e) {
+    // Column likely already exists, ignore error
+}
+
 // Handle actions
 if (isset($_POST['action'])) {
     $response = ['success' => false, 'message' => ''];
@@ -131,6 +138,125 @@ if (isset($_POST['action'])) {
                 $response = ['success' => true, 'message' => 'Note added successfully'];
             } catch (Exception $e) {
                 $response = ['success' => false, 'message' => 'Error adding note: ' . $e->getMessage()];
+            }
+            break;
+            
+        case 'auto_block':
+            try {
+                $db->beginTransaction();
+                
+                // Get paste info and flag count
+                $stmt = $db->prepare("SELECT id, title, user_id, flags FROM pastes WHERE id = ?");
+                $stmt->execute([$_POST['paste_id']]);
+                $paste_info = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$paste_info) {
+                    throw new Exception('Paste not found');
+                }
+                
+                // Check if paste has 5 or more flags
+                if ($paste_info['flags'] < 5) {
+                    throw new Exception('Paste must have at least 5 flags for auto-block');
+                }
+                
+                // Block the paste (set as private and add blocked status)
+                $db->prepare("UPDATE pastes SET is_public = 0, status = 'blocked' WHERE id = ?")->execute([$_POST['paste_id']]);
+                
+                // Mark all flags as resolved
+                $db->prepare("UPDATE paste_flags SET status = 'resolved', reviewed_by = ?, reviewed_at = ? WHERE paste_id = ? AND status = 'pending'")->execute([$_SESSION['admin_id'], time(), $_POST['paste_id']]);
+                
+                // Add admin note about auto-blocking
+                $note = "Paste automatically blocked due to exceeding 5+ flags threshold. Action taken by admin.";
+                $db->prepare("INSERT INTO admin_notes (paste_id, admin_id, note, created_at) VALUES (?, ?, ?, ?)")
+                   ->execute([$_POST['paste_id'], $_SESSION['admin_id'], $note, time()]);
+                
+                // Log the action
+                require_once 'audit_logger.php';
+                $audit_logger = new AuditLogger();
+                $audit_logger->log('paste_auto_blocked', $_SESSION['admin_id'], [
+                    'paste_id' => $_POST['paste_id'],
+                    'paste_title' => $paste_info['title'],
+                    'paste_user_id' => $paste_info['user_id'],
+                    'flag_count' => $paste_info['flags'],
+                    'action' => 'auto_blocked'
+                ]);
+                
+                $db->commit();
+                $response = ['success' => true, 'message' => 'Paste auto-blocked successfully'];
+            } catch (Exception $e) {
+                $db->rollback();
+                $response = ['success' => false, 'message' => 'Error auto-blocking paste: ' . $e->getMessage()];
+            }
+            break;
+            
+        case 'block':
+            try {
+                $db->beginTransaction();
+                
+                // Get paste info
+                $stmt = $db->prepare("SELECT id, title, user_id, flags FROM pastes WHERE id = ?");
+                $stmt->execute([$_POST['paste_id']]);
+                $paste_info = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$paste_info) {
+                    throw new Exception('Paste not found');
+                }
+                
+                // Block the paste (set as private and add blocked status)
+                $db->prepare("UPDATE pastes SET is_public = 0, status = 'blocked' WHERE id = ?")->execute([$_POST['paste_id']]);
+                
+                // Mark all flags as resolved if any exist
+                $db->prepare("UPDATE paste_flags SET status = 'resolved', reviewed_by = ?, reviewed_at = ? WHERE paste_id = ? AND status = 'pending'")->execute([$_SESSION['admin_id'], time(), $_POST['paste_id']]);
+                
+                // Add admin note about blocking
+                $note = "Paste manually blocked by admin. Reason: " . ($_POST['block_reason'] ?? 'Administrative decision');
+                $db->prepare("INSERT INTO admin_notes (paste_id, admin_id, note, created_at) VALUES (?, ?, ?, ?)")
+                   ->execute([$_POST['paste_id'], $_SESSION['admin_id'], $note, time()]);
+                
+                // Log the action
+                require_once 'audit_logger.php';
+                $audit_logger = new AuditLogger();
+                $audit_logger->log('paste_blocked', $_SESSION['admin_id'], [
+                    'paste_id' => $_POST['paste_id'],
+                    'paste_title' => $paste_info['title'],
+                    'paste_user_id' => $paste_info['user_id'],
+                    'flag_count' => $paste_info['flags'],
+                    'reason' => $_POST['block_reason'] ?? 'Administrative decision',
+                    'action' => 'blocked'
+                ]);
+                
+                $db->commit();
+                $response = ['success' => true, 'message' => 'Paste blocked successfully'];
+            } catch (Exception $e) {
+                $db->rollback();
+                $response = ['success' => false, 'message' => 'Error blocking paste: ' . $e->getMessage()];
+            }
+            break;
+            
+        case 'update_flag_count':
+            try {
+                $new_count = intval($_POST['flag_count']);
+                $paste_id = intval($_POST['paste_id']);
+                
+                if ($new_count < 0) {
+                    throw new Exception('Flag count cannot be negative');
+                }
+                
+                // Update the flag count in the pastes table
+                $db->prepare("UPDATE pastes SET flags = ? WHERE id = ?")->execute([$new_count, $paste_id]);
+                
+                // Log the action
+                require_once 'audit_logger.php';
+                $audit_logger = new AuditLogger();
+                $audit_logger->log('flag_count_updated', $_SESSION['admin_id'], [
+                    'paste_id' => $paste_id,
+                    'new_flag_count' => $new_count,
+                    'action' => 'flag_count_updated'
+                ]);
+                
+                $response = ['success' => true, 'message' => 'Flag count updated successfully', 'new_count' => $new_count];
+            } catch (Exception $e) {
+                $response = ['success' => false, 'message' => 'Error updating flag count: ' . $e->getMessage()];
             }
             break;
     }
@@ -303,15 +429,29 @@ try {
                         <?php endif; ?>
                     </td>
                     <td class="p-3">
-                        <span class="font-semibold <?= $paste['flag_count'] >= 5 ? 'text-red-400' : ($paste['flag_count'] >= 3 ? 'text-yellow-400' : 'text-gray-400') ?>">
+                        <span id="flag_count_display_<?= $paste['id'] ?>" 
+                              onclick="editFlagCount(<?= $paste['id'] ?>, <?= $paste['flag_count'] ?>)" 
+                              class="font-semibold cursor-pointer hover:bg-gray-600 px-2 py-1 rounded <?= $paste['flag_count'] >= 5 ? 'text-red-400' : ($paste['flag_count'] >= 3 ? 'text-yellow-400' : 'text-gray-400') ?>" 
+                              title="Click to edit flag count">
                             <?= $paste['flag_count'] ?>
                         </span>
+                        <input type="number" 
+                               id="flag_count_input_<?= $paste['id'] ?>" 
+                               value="<?= $paste['flag_count'] ?>" 
+                               min="0" 
+                               class="hidden w-16 px-2 py-1 text-center bg-gray-700 border border-gray-600 rounded text-white" 
+                               onblur="saveFlagCount(<?= $paste['id'] ?>)" 
+                               onkeypress="handleFlagCountKeypress(event, <?= $paste['id'] ?>)">
                     </td>
                     <td class="p-3"><?= date('Y-m-d H:i', $paste['created_at']) ?></td>
                     <td class="p-3 space-x-2">
                         <div class="flex space-x-1">
                             <button onclick="approvePaste(<?= $paste['id'] ?>)" class="text-green-400 hover:text-green-300 p-1 rounded hover:bg-green-500/20" title="Approve Paste">✅</button>
                             <button onclick="removePaste(<?= $paste['id'] ?>)" class="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-500/20" title="Remove Paste">❌</button>
+                            <button onclick="blockPaste(<?= $paste['id'] ?>)" class="text-orange-500 hover:text-orange-300 p-1 rounded hover:bg-orange-500/20" title="Block Paste">🔒</button>
+                            <?php if ($paste['flag_count'] >= 5): ?>
+                                <button onclick="autoBlockPaste(<?= $paste['id'] ?>)" class="text-orange-400 hover:text-orange-300 p-1 rounded hover:bg-orange-500/20" title="Auto-Block (5+ Flags)">🚫</button>
+                            <?php endif; ?>
                             <?php if ($paste['user_id']): ?>
                                 <button onclick="warnUser('<?= $paste['user_id'] ?>')" class="text-yellow-400 hover:text-yellow-300 p-1 rounded hover:bg-yellow-500/20" title="Warn User">⚠️</button>
                             <?php endif; ?>
@@ -390,6 +530,25 @@ window.addNote = function(pasteId) {
     if (note && note.trim()) {
         submitAction('add_note', { paste_id: pasteId, note: note.trim() });
     }
+}
+
+window.blockPaste = function(pasteId) {
+    const reason = prompt('Enter reason for blocking this paste (optional):');
+    if (reason === null) return; // User cancelled
+    
+    if (!confirm('Are you sure you want to block this paste?\n\nThis will:\n• Hide the paste from public view\n• Mark any flags as resolved\n• Add an admin note\n• Log the action\n\nThis action can be reversed by manually making the paste public again.')) {
+        return;
+    }
+    
+    submitAction('block', { paste_id: pasteId, block_reason: reason || 'Administrative decision' });
+}
+
+window.autoBlockPaste = function(pasteId) {
+    if (!confirm('Are you sure you want to auto-block this paste?\n\nThis will:\n• Hide the paste from public view\n• Mark all flags as resolved\n• Add an admin note\n• Log the action\n\nThis action can be reversed by manually making the paste public again.')) {
+        return;
+    }
+    
+    submitAction('auto_block', { paste_id: pasteId });
 }
 
 window.viewNotes = function(pasteId) {
@@ -651,6 +810,107 @@ window.clearFilters = function() {
     document.getElementById('dateFromFilter').value = '';
     document.getElementById('dateToFilter').value = '';
     applyFilters();
+}
+
+// Flag count editing functions
+window.editFlagCount = function(pasteId, currentCount) {
+    const display = document.getElementById(`flag_count_display_${pasteId}`);
+    const input = document.getElementById(`flag_count_input_${pasteId}`);
+    
+    if (display && input) {
+        display.classList.add('hidden');
+        input.classList.remove('hidden');
+        input.value = currentCount;
+        input.focus();
+        input.select();
+    }
+}
+
+window.saveFlagCount = function(pasteId) {
+    const display = document.getElementById(`flag_count_display_${pasteId}`);
+    const input = document.getElementById(`flag_count_input_${pasteId}`);
+    
+    if (!display || !input) return;
+    
+    const newCount = parseInt(input.value);
+    const currentCount = parseInt(display.textContent.trim());
+    
+    // If no change, just hide the input
+    if (newCount === currentCount || isNaN(newCount)) {
+        input.classList.add('hidden');
+        display.classList.remove('hidden');
+        return;
+    }
+    
+    // Validate input
+    if (newCount < 0) {
+        alert('Flag count cannot be negative');
+        input.value = currentCount;
+        return;
+    }
+    
+    // Save to database
+    const formData = new FormData();
+    formData.append('action', 'update_flag_count');
+    formData.append('paste_id', pasteId);
+    formData.append('flag_count', newCount);
+    
+    fetch('admin-flagged.php', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            // Update display
+            display.textContent = result.new_count;
+            
+            // Update color based on new count
+            display.className = display.className.replace(/text-(red|yellow|gray)-400/g, '');
+            if (result.new_count >= 5) {
+                display.classList.add('text-red-400');
+            } else if (result.new_count >= 3) {
+                display.classList.add('text-yellow-400');
+            } else {
+                display.classList.add('text-gray-400');
+            }
+            
+            showMessage(result.message, 'success');
+        } else {
+            showMessage(result.message || 'Failed to update flag count', 'error');
+            input.value = currentCount; // Reset to original value
+        }
+    })
+    .catch(error => {
+        console.error('Error updating flag count:', error);
+        showMessage('Network error occurred', 'error');
+        input.value = currentCount; // Reset to original value
+    })
+    .finally(() => {
+        // Hide input and show display
+        input.classList.add('hidden');
+        display.classList.remove('hidden');
+    });
+}
+
+window.handleFlagCountKeypress = function(event, pasteId) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        saveFlagCount(pasteId);
+    } else if (event.key === 'Escape') {
+        event.preventDefault();
+        const display = document.getElementById(`flag_count_display_${pasteId}`);
+        const input = document.getElementById(`flag_count_input_${pasteId}`);
+        
+        if (display && input) {
+            input.value = display.textContent.trim(); // Reset to original value
+            input.classList.add('hidden');
+            display.classList.remove('hidden');
+        }
+    }
 }
 
 // Initialize filters and add auto-submit functionality
