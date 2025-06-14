@@ -41,7 +41,7 @@ $stmt = $db->prepare("SELECT COUNT(*) as total_pastes FROM pastes WHERE user_id 
 $stmt->execute([$user_id]);
 $total_pastes = $stmt->fetch()['total_pastes'];
 
-$stmt = $db->prepare("SELECT COUNT(*) as public_pastes FROM pastes WHERE user_id = ? AND is_public = 1");
+$stmt = $db->prepare("SELECT COUNT(*) as public_pastes FROM pastes WHERE user_id = ? AND is_public = 1 AND zero_knowledge = 0");
 $stmt->execute([$user_id]);
 $public_pastes = $stmt->fetch()['public_pastes'];
 
