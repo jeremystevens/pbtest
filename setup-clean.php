@@ -48,6 +48,7 @@ try {
       views INTEGER DEFAULT 0,
       user_id TEXT,
       burn_after_read BOOLEAN DEFAULT 0,
+      zero_knowledge INTEGER DEFAULT 0,
       flags INTEGER DEFAULT 0,
       flag_type TEXT,
       flag_source TEXT,
