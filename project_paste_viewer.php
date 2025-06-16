@@ -3,7 +3,6 @@
 session_start();
 require_once 'database.php';
 require_once 'related_pastes_helper.php';
-require_once 'utility.php';
 
 if (!isset($_GET['id'])) {
     header('Location: /');
@@ -12,6 +11,26 @@ if (!isset($_GET['id'])) {
 
 $paste_id = $_GET['id'];
 $db = Database::getInstance()->getConnection();
+
+function human_time_diff($timestamp) {
+    if (!is_numeric($timestamp)) {
+        $timestamp = strtotime($timestamp);
+    }
+    $timestamp = intval($timestamp);
+    $diff = time() - $timestamp;
+    if ($diff < 60) return 'just now';
+    if ($diff < 3600) return floor($diff / 60) . ' minutes ago';
+    if ($diff < 86400) return floor($diff / 3600) . ' hours ago';
+
+    $days = floor($diff / 86400);
+    if ($days < 30) return $days . ' days ago';
+
+    $months = floor($days / 30);
+    if ($months < 12) return $months . ' month' . ($months > 1 ? 's' : '') . ' ago';
+
+    $years = floor($months / 12);
+    return $years . ' year' . ($years > 1 ? 's' : '') . ' ago';
+}
 
 // Check if this paste belongs to a project
 $stmt = $db->prepare("
@@ -604,4 +623,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </body>
 </html>
-</replit_final_file>
+

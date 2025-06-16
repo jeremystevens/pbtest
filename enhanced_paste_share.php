@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
         
         // Get paste info
-        $stmt = $db->prepare("SELECT * FROM pastes WHERE id = ? AND is_public = 1");
+        $stmt = $db->prepare("SELECT * FROM pastes WHERE id = ? AND is_public = 1 AND zero_knowledge = 0");
         $stmt->execute([$paste_id]);
         $paste = $stmt->fetch(PDO::FETCH_ASSOC);
         
