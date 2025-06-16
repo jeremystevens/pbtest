@@ -75,7 +75,7 @@ class RelatedPastesHelper {
         
         if (empty($conditions)) {
             // Fallback: just get recent public pastes
-            $conditions[] = "p.is_public = 1";
+            $conditions[] = "p.is_public = 1 AND p.zero_knowledge = 0";
             $params[] = 1;
         }
         
@@ -90,8 +90,8 @@ class RelatedPastesHelper {
                    END as relevance_score
             FROM pastes p
             LEFT JOIN users u ON p.user_id = u.id
-            WHERE p.id != ? 
-            AND p.is_public = 1 
+            WHERE p.id != ?
+            AND p.is_public = 1 AND p.zero_knowledge = 0
             AND (p.expire_time IS NULL OR p.expire_time > ?)
             AND ($where_clause)
             ORDER BY relevance_score DESC, p.created_at DESC
@@ -122,8 +122,8 @@ class RelatedPastesHelper {
             FROM paste_related_cache prc
             JOIN pastes p ON prc.related_paste_id = p.id
             LEFT JOIN users u ON p.user_id = u.id
-            WHERE prc.paste_id = ? 
-            AND p.is_public = 1 
+            WHERE prc.paste_id = ?
+            AND p.is_public = 1 AND p.zero_knowledge = 0
             AND (p.expire_time IS NULL OR p.expire_time > ?)
             ORDER BY prc.relevance_score DESC, p.created_at DESC
             LIMIT ?
