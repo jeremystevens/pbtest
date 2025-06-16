@@ -168,10 +168,12 @@ function human_time_diff($timestamp) {
 }
 
 // Build pagination URLs with current filter parameters
-function buildPaginationUrl($page) {
-    $params = $_GET;
-    $params['p'] = $page;
-    return '?' . http_build_query($params);
+if (!function_exists('buildPaginationUrl')) {
+    function buildPaginationUrl($page) {
+        $params = $_GET;
+        $params['p'] = $page;
+        return '?' . http_build_query($params);
+    }
 }
 
 
