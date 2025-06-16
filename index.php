@@ -2402,7 +2402,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                       </div>
                     </div>
                   </div>
-                </div></old_str>
+                </div>
             <!-- Versions Tab -->
                 <?php if ($version_count > 1): ?>
                 <div id="paste-content-versions" class="tab-content hidden" role="tabpanel">
@@ -3385,7 +3385,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
                 padding-right: 0.8em;
                 text-align: right;
               }
-            </style></old_str>
+            </style>
 
 
             <script>
