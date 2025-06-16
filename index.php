@@ -1743,49 +1743,15 @@ $theme = $_COOKIE['theme'] ?? 'dark';
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const sidebar = document.getElementById('sidebar');
-      const mainContent = document.getElementById('mainContent');
       const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
-
       if (sidebarToggleBtn && sidebar) {
-        const updateLayout = (isOpen) => {
-          sidebar.style.transform = isOpen ? 'translateX(0)' : 'translateX(-100%)';
-          mainContent.style.marginLeft = isOpen ? '16rem' : '0';
-          const icon = sidebarToggleBtn.querySelector('i');
-          icon.className = isOpen ? 'fas fa-chevron-left' : 'fas fa-chevron-right';
-        };
-
-        // Initialize sidebar state
-        let isOpen = window.innerWidth >= 1024; // lg breakpoint
-        updateLayout(isOpen);
-
-        sidebarToggleBtn.addEventListener('click', () => {
-          isOpen = !isOpen;
-          updateLayout(isOpen);
-        });
-
-        // Handle window resize
-        window.addEventListener('resize', () => {
-          if (window.innerWidth >= 1024) {
-            isOpen = true;
-            updateLayout(true);
-          } else {
-            isOpen = false;
-            updateLayout(false);
-          }
+        sidebarToggleBtn.addEventListener("click", () => {
+          sidebar.classList.toggle("-translate-x-full");
         });
       }
-
-      // Initialize countdown timers
       initializeCountdownTimers();
+      gsap.from(".paste-form-element", { y: 20, opacity: 0, duration: 0.5, ease: "power2.out", stagger: 0.1 });
 
-      // Form animations
-      gsap.from('.paste-form-element', {
-        y: 20,
-        opacity: 0,
-        duration: 0.5,
-        ease: 'power2.out',
-        stagger: 0.1
-      });
     });
   </script>
   <script>
@@ -1866,31 +1832,27 @@ $theme = $_COOKIE['theme'] ?? 'dark';
 </head>
 <body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
   <!-- Modern Navigation Bar -->
-  <nav class="bg-blue-600 dark:bg-blue-800 text-white shadow-lg fixed w-full z-10">
+  <nav x-data="{ open: false }" class="bg-blue-600 dark:bg-blue-800 text-white shadow-lg fixed w-full z-10">
     <div class="max-w-7xl mx-auto px-4">
-      <div class="flex justify-between h-16">
-        <div class="flex items-center space-x-6">
-          <a href="/" class="flex items-center space-x-3">
-            <i class="fas fa-paste text-2xl"></i>
-            <span class="text-xl font-bold">PasteForge</span>
-          </a>
-          <div class="flex space-x-4">
-            <a href="/" class="hover:bg-blue-700 px-3 py-2 rounded">Home</a>
-            <a href="?page=archive" class="hover:bg-blue-700 px-3 py-2 rounded">Archive</a>
-            <?php if ($user_id): ?>
-              <a href="?page=collections" class="hover:bg-blue-700 px-3 py-2 rounded">Collections</a>
-            <?php else: ?>
-              <a href="?page=about" class="hover:bg-blue-700 px-3 py-2 rounded">About</a>
-            <?php endif; ?>
-          </div>
-        </div>
-        <div class="flex items-center space-x-4">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center space-x-3">
+          <i class="fas fa-paste text-2xl"></i>
+          <span class="text-xl font-bold">PasteForge</span>
+        </a>
+        <div class="hidden lg:flex items-center space-x-4">
+          <a href="/" class="hover:bg-blue-700 px-3 py-2 rounded">Home</a>
+          <a href="?page=archive" class="hover:bg-blue-700 px-3 py-2 rounded">Archive</a>
           <?php if ($user_id): ?>
-            <!-- Notification Bell -->
+            <a href="?page=collections" class="hover:bg-blue-700 px-3 py-2 rounded">Collections</a>
+          <?php else: ?>
+            <a href="?page=about" class="hover:bg-blue-700 px-3 py-2 rounded">About</a>
+          <?php endif; ?>
+        </div>
+        <div class="hidden lg:flex items-center space-x-4">
+          <?php if ($user_id): ?>
             <a href="notifications.php" class="relative p-2 rounded hover:bg-blue-700 transition-colors">
               <i class="fas fa-bell text-lg"></i>
               <?php
-              // Get unread notification count for navigation
               $stmt = $db->prepare("SELECT COUNT(*) FROM comment_notifications WHERE user_id = ? AND is_read = 0");
               $stmt->execute([$user_id]);
               $nav_unread_notifications = $stmt->fetchColumn();
@@ -1917,76 +1879,57 @@ $theme = $_COOKIE['theme'] ?? 'dark';
               </a>
             </div>
           <?php else: ?>
-            <div class="relative" x-data="{ open: false }">
-              <button @click="open = !open" class="flex items-center space-x-2 hover:bg-blue-700 px-3 py-2 rounded">
+            <div class="relative" x-data="{ dd: false }">
+              <button @click="dd = !dd" class="flex items-center space-x-2 hover:bg-blue-700 px-3 py-2 rounded">
                 <?php
                 $stmt = $db->prepare("SELECT profile_image FROM users WHERE id = ?");
                 $stmt->execute([$user_id]);
                 $user_avatar = $stmt->fetch()['profile_image'];
               ?>
-              <img src="<?= $user_avatar ?? 'https://www.gravatar.com/avatar/'.md5(strtolower($username)).'?d=mp&s=32' ?>" 
-                   class="w-8 h-8 rounded-full" alt="Profile">
+              <img src="<?= $user_avatar ?? 'https://www.gravatar.com/avatar/'.md5(strtolower($username)).'?d=mp&s=32' ?>" class="w-8 h-8 rounded-full" alt="Profile">
                 <span><?= htmlspecialchars($username) ?></span>
                 <i class="fas fa-chevron-down ml-1"></i>
               </button>
-              <div x-show="open" 
-                   @click.away="open = false"
-                   x-transition:enter="transition ease-out duration-100"
-                   x-transition:enter-start="transform opacity-0 scale-95"
-                   x-transition:enter-end="transform opacity-100 scale-100"
-                   x-transition:leave="transition ease-in duration-75"
-                   x-transition:leave-start="transform opacity-100 scale-100"
-                   x-transition:leave-end="transform opacity-0 scale-95"
-                   class="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5">
+              <div x-show="dd" @click.away="dd = false" x-transition class="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5">
                 <div class="py-1">
-                  <!-- Account Group -->
                   <div class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Account</div>
-                  <a href="?page=edit-profile" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <i class="fas fa-user-edit mr-2"></i> Edit Profile
-                  </a>
-                  <a href="?page=profile&username=<?= urlencode($username) ?>" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <i class="fas fa-user mr-2"></i> View Profile
-                  </a>
-                  <a href="?page=account" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <i class="fas fa-crown mr-2"></i> Account
-                  </a>
-                  <a href="?page=settings" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <i class="fas fa-cog mr-2"></i> Edit Settings
-                  </a>
-
+                  <a href="?page=edit-profile" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-user-edit mr-2"></i> Edit Profile</a>
+                  <a href="?page=profile&username=<?= urlencode($username) ?>" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-user mr-2"></i> View Profile</a>
+                  <a href="?page=account" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-crown mr-2"></i> Account</a>
+                  <a href="?page=settings" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-cog mr-2"></i> Edit Settings</a>
                   <hr class="my-1 border-gray-200 dark:border-gray-700">
-
-                  <!-- Messages Group -->
                   <div class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Messages</div>
-                  <a href="threaded_messages.php" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <i class="fas fa-envelope mr-2"></i> My Messages
-                  </a>
-
+                  <a href="threaded_messages.php" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-envelope mr-2"></i> My Messages</a>
                   <hr class="my-1 border-gray-200 dark:border-gray-700">
-
-                  <!-- Tools Group -->
                   <div class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tools</div>
-                  <a href="project_manager.php" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <i class="fas fa-folder-tree mr-2"></i> Projects
-                  </a>
-                  <a href="following.php" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <i class="fas fa-users mr-2"></i> Following
-                  </a>
-                  <a href="?page=import-export" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <i class="fas fa-exchange-alt mr-2"></i> Import/Export
-                  </a>
-
+                  <a href="project_manager.php" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-folder-tree mr-2"></i> Projects</a>
+                  <a href="following.php" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-users mr-2"></i> Following</a>
+                  <a href="?page=import-export" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-exchange-alt mr-2"></i> Import/Export</a>
                   <hr class="my-1 border-gray-200 dark:border-gray-700">
-
-                  <!-- Logout -->
-                  <a href="?logout=1" class="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <i class="fas fa-sign-out-alt mr-2"></i> Logout
-                  </a>
+                  <a href="?logout=1" class="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-sign-out-alt mr-2"></i> Logout</a>
                 </div>
               </div>
             </div>
           <?php endif; ?>
         </div>
+        <div class="lg:hidden flex items-center space-x-2">
+          <button @click="open = !open" class="p-2 rounded hover:bg-blue-700">
+            <i class="fas fa-bars"></i>
+          </button>
+        </div>
+      </div>
+      <div x-show="open" class="lg:hidden pb-4 space-y-2">
+        <a href="/" class="block hover:bg-blue-700 px-3 py-2 rounded">Home</a>
+        <a href="?page=archive" class="block hover:bg-blue-700 px-3 py-2 rounded">Archive</a>
+        <?php if ($user_id): ?>
+          <a href="?page=collections" class="block hover:bg-blue-700 px-3 py-2 rounded">Collections</a>
+          <a href="notifications.php" class="block hover:bg-blue-700 px-3 py-2 rounded">Notifications</a>
+          <a href="?logout=1" class="block hover:bg-blue-700 px-3 py-2 rounded">Logout</a>
+        <?php else: ?>
+          <a href="?page=about" class="block hover:bg-blue-700 px-3 py-2 rounded">About</a>
+          <a href="?page=login" class="block hover:bg-blue-700 px-3 py-2 rounded">Login</a>
+          <a href="?page=signup" class="block hover:bg-blue-700 px-3 py-2 rounded">Sign Up</a>
+        <?php endif; ?>
       </div>
     </div>
   </nav>
@@ -1994,7 +1937,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
   <!-- Main Content with Sidebar -->
   <div class="min-h-screen pt-16 flex relative">
     <!-- Modern Sidebar -->
-    <div id="sidebar" class="fixed left-0 top-16 h-[calc(100vh-4rem)] bg-white dark:bg-gray-800 w-64 transform transition-transform duration-300 ease-in-out shadow-lg z-50">
+    <div id="sidebar" class="-translate-x-full lg:translate-x-0 fixed left-0 top-16 h-[calc(100vh-4rem)] bg-white dark:bg-gray-800 w-64 transform transition-transform duration-300 ease-in-out shadow-lg z-50">
       <!-- Sidebar Toggle Button (positioned absolutely) -->
       <button id="sidebarToggleBtn" class="absolute -right-8 top-1/2 transform -translate-y-1/2 bg-white dark:bg-gray-800 p-2 rounded-r shadow-lg hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none z-50">
         <i class="fas fa-chevron-right"></i>
@@ -2030,7 +1973,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
     </div>
 
     <!-- Main Content -->
-    <div class="flex-1 transition-all duration-300" id="mainContent">
+    <div class="flex-1 transition-all duration-300 lg:ml-64" id="mainContent">
       <div class="max-w-4xl mx-auto px-4 py-8">
         <?php if ($paste): ?>
           <?php if ($paste['password'] && !isset($password_error) && !isset($_POST['paste_password'])): ?>

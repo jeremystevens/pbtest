@@ -153,7 +153,7 @@ $theme = $_COOKIE['theme'] ?? 'dark';
     <!-- Modern Navigation Bar -->
     <nav class="bg-blue-600 dark:bg-blue-800 text-white shadow-lg fixed w-full z-10">
         <div class="max-w-7xl mx-auto px-4">
-            <div class="flex justify-between h-16">
+            <div class="flex flex-wrap items-center justify-between h-16">
                 <div class="flex items-center space-x-6">
                     <a href="/" class="flex items-center space-x-3">
                         <i class="fas fa-paste text-2xl"></i>
