@@ -6026,277 +6026,21 @@ plt.show()</code></pre>
           <?php if (isset($_GET['page']) && $_GET['page'] === 'archive'): ?>
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
               <h2 class="text-2xl font-bold mb-6">
-                <i class="fas fa-archive mr-2"></i>Global Search & Archive
+                <i class="fas fa-archive mr-2"></i>Archive
               </h2>
-
-              <!-- Sleek Search Section -->
-              <div class="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-                <form method="GET" id="searchForm">
-                  <input type="hidden" name="page" value="archive">
-
-                  <!-- Main Search Row -->
-                  <div class="flex flex-col lg:flex-row gap-3">
-                    <!-- Search Input -->
-                    <div class="flex-1">
-                      <div class="relative">
-                        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                        <input type="text" 
-                               name="search" 
-                               value="<?= htmlspecialchars($_GET['search'] ?? '') ?>"
-                               placeholder="Search pastes, content, or tags..."
-                               class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                      </div>
-                    </div>
-
-                    <!-- Language Filter -->
-                    <div class="min-w-0 lg:w-40">
-                      <select name="language" class="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500">
-                        <option value="">All Languages</option>
-                        <?php
-                        $lang_stmt = $db->query("SELECT DISTINCT language FROM pastes WHERE is_public = 1 AND zero_knowledge = 0 AND (expire_time IS NULL OR expire_time > " . time() . ") ORDER BY language");
-                        $languages = $lang_stmt->fetchAll(PDO::FETCH_COLUMN);
-                        foreach ($languages as $lang):
-                        ?>
-                          <option value="<?= htmlspecialchars($lang) ?>" <?= ($_GET['language'] ?? '') === $lang ? 'selected' : '' ?>>
-                            <?= htmlspecialchars(ucfirst($lang)) ?>
-                          </option>
-                        <?php endforeach; ?>
-                      </select>
-                    </div>
-
-                    <!-- Sort Filter -->
-                    <div class="min-w-0 lg:w-36">
-                      <select name="sort_by" class="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500">
-                        <option value="created_at_desc" <?= ($_GET['sort_by'] ?? 'created_at_desc') === 'created_at_desc' ? 'selected' : '' ?>>Newest</option>
-                        <option value="views_desc" <?= ($_GET['sort_by'] ?? '') === 'views_desc' ? 'selected' : '' ?>>Popular</option>
-                        <option value="created_at_asc" <?= ($_GET['sort_by'] ?? '') === 'created_at_asc' ? 'selected' : '' ?>>Oldest</option>
-                        <option value="title_asc" <?= ($_GET['sort_by'] ?? '') === 'title_asc' ? 'selected' : '' ?>>A-Z</option>
-                      </select>
-                    </div>
-
-                    <!-- Search Button -->
-                    <button type="submit" class="px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center">
-                      <i class="fas fa-search lg:mr-2"></i>
-                      <span class="hidden lg:inline">Search</span>
-                    </button>
-
-                    <!-- Advanced Toggle -->
-                    <button type="button" onclick="toggleAdvancedFilters()" class="px-3 py-2.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                      <i class="fas fa-sliders-h"></i>
-                    </button>
-                  </div>
-
-                  <!-- Advanced Filters (Hidden by default) -->
-                  <div id="advancedFilters" class="hidden mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                      <div>
-                        <input type="text" 
-                               name="user" 
-                               value="<?= htmlspecialchars($_GET['user'] ?? '') ?>"
-                               placeholder="Author username..."
-                               class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm">
-                      </div>
-                      <div>
-                        <input type="text" 
-                               name="tags" 
-                               value="<?= htmlspecialchars($_GET['tags'] ?? '') ?>"
-                               placeholder="Tags (comma separated)..."
-                               class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm">
-                      </div>
-                      <div>
-                        <input type="date" 
-                               name="date_from" 
-                               value="<?= htmlspecialchars($_GET['date_from'] ?? '') ?>"
-                               class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm">
-                      </div>
-                      <div>
-                        <input type="date" 
-                               name="date_to" 
-                               value="<?= htmlspecialchars($_GET['date_to'] ?? '') ?>"
-                               class="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm">
-                      </div>
-                    </div>
-                    <div class="mt-3 flex gap-2">
-                      <a href="?page=archive" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
-                        Clear All Filters
-                      </a>
-                    </div>
-                  </div>
-                </form>
-
-                <!-- Quick Filter Pills (More Compact) -->
-                <?php if (empty($_GET['search']) && empty($_GET['language']) && empty($_GET['user'])): ?>
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <button onclick="quickFilter('language', 'javascript')" class="px-3 py-1 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full text-xs hover:bg-yellow-100 dark:hover:bg-yellow-900/50 transition-colors">JavaScript</button>
-                  <button onclick="quickFilter('language', 'python')" class="px-3 py-1 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xs hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors">Python</button>
-                  <button onclick="quickFilter('language', 'php')" class="px-3 py-1 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-xs hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors">PHP</button>
-                  <button onclick="quickFilter('sort_by', 'views_desc')" class="px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">Popular</button>
-                </div>
-                <?php endif; ?>
-              </div>
-
-              <!-- Search Results Summary -->
-              <?php
-              // Build search conditions
-              $search_conditions = ["p.is_public = 1", "p.zero_knowledge = 0", "(p.expire_time IS NULL OR p.expire_time > ?)", "p.parent_paste_id IS NULL"];
-              $search_params = [time()];
-
-              // Add search term
-              if (!empty($_GET['search'])) {
-                $search_conditions[] = "(p.title LIKE ? OR p.content LIKE ? OR p.tags LIKE ?)";
-                $search_term = '%' . $_GET['search'] . '%';
-                $search_params = array_merge($search_params, [$search_term, $search_term, $search_term]);
-              }
-
-              // Add language filter
-              if (!empty($_GET['language'])) {
-                $search_conditions[] = "p.language = ?";
-                $search_params[] = $_GET['language'];
-              }
-
-              // Add user filter
-              if (!empty($_GET['user'])) {
-                $search_conditions[] = "u.username LIKE ?";
-                $search_params[] = '%' . $_GET['user'] . '%';
-              }
-
-              // Add tags filter
-              if (!empty($_GET['tags'])) {
-                $tags = explode(',', $_GET['tags']);
-                $tag_conditions = [];
-                foreach ($tags as $tag) {
-                  $tag = trim($tag);
-                  if ($tag) {
-                    $tag_conditions[] = "p.tags LIKE ?";
-                    $search_params[] = '%' . $tag . '%';
-                  }
-                }
-                if (!empty($tag_conditions)) {
-                  $search_conditions[] = "(" . implode(" OR ", $tag_conditions) . ")";
-                }
-              }
-
-              // Add date filters
-              if (!empty($_GET['date_from'])) {
-                $search_conditions[] = "p.created_at >= ?";
-                $search_params[] = strtotime($_GET['date_from']);
-              }
-
-              if (!empty($_GET['date_to'])) {
-                $search_conditions[] = "p.created_at <= ?";
-                $search_params[] = strtotime($_GET['date_to'] . ' 23:59:59');
-              }
-
-              // Build ORDER BY clause
-              $sort_by = $_GET['sort_by'] ?? 'created_at_desc';
-              switch($sort_by) {
-                case 'created_at_asc':
-                  $order_clause = 'ORDER BY p.created_at ASC';
-                  break;
-                case 'views_desc':
-                  $order_clause = 'ORDER BY p.views DESC';
-                  break;
-                case 'views_asc':
-                  $order_clause = 'ORDER BY p.views ASC';
-                  break;
-                case 'title_asc':
-                  $order_clause = 'ORDER BY p.title ASC';
-                  break;
-                case 'title_desc':
-                  $order_clause = 'ORDER BY p.title DESC';
-                  break;
-                default:
-                  $order_clause = 'ORDER BY p.created_at DESC';
-                  break;
-              }
-
-              // Get total count with filters
-              $count_query = "
-                SELECT COUNT(*) as total 
-                FROM pastes p
-                LEFT JOIN users u ON p.user_id = u.id
-                WHERE " . implode(" AND ", $search_conditions);
-
-              $count_stmt = $db->prepare($count_query);
-              $count_stmt->execute($search_params);
-              $total_count = $count_stmt->fetch()['total'];
-
-              // Pagination
-              // Limit archive view to 5 pastes per page
-              $items_per_page = 5;
-              $current_page = isset($_GET['p']) ? max(1, intval($_GET['p'])) : 1;
-              $offset = ($current_page - 1) * $items_per_page;
-              $total_pages = ceil($total_count / $items_per_page);
-
-              // Get filtered results
-              $results_query = "
-                SELECT p.*, u.username,
-                (SELECT COUNT(*) FROM comments WHERE paste_id = p.id) as comment_count,
-                COALESCE(p.fork_count, 0) as fork_count,
-                CASE WHEN p.original_paste_id IS NOT NULL THEN 1 ELSE 0 END as is_fork,
-                p.original_paste_id,
-                p.parent_paste_id,
-                (SELECT COUNT(*) FROM pastes WHERE parent_paste_id = p.id AND is_public = 1 AND zero_knowledge = 0) as child_count
-                FROM pastes p 
-                LEFT JOIN users u ON p.user_id = u.id
-                WHERE " . implode(" AND ", $search_conditions) . "
-                {$order_clause}
-                LIMIT ? OFFSET ?";
-
-              $search_params[] = $items_per_page;
-              $search_params[] = $offset;
-
-              $stmt = $db->prepare($results_query);
-              $stmt->execute($search_params);
-              $archive_pastes = $stmt->fetchAll();
-              ?>
-
-              <?php if (!empty($_GET['search']) || !empty($_GET['language']) || !empty($_GET['user']) || !empty($_GET['tags']) || !empty($_GET['date_from']) || !empty($_GET['date_to'])): ?>
-              <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <h3 class="text-lg font-medium text-blue-800 dark:text-blue-200">
-                      <i class="fas fa-search mr-2"></i>Search Results
-                    </h3>
-                    <p class="text-blue-600 dark:text-blue-300">
-                      Found <?= number_format($total_count) ?> paste<?= $total_count !== 1 ? 's' : '' ?>
-                      <?php if (!empty($_GET['search'])): ?>
-                        matching "<?= htmlspecialchars($_GET['search']) ?>"
-                      <?php endif; ?>
-                    </p>
-                  </div>
-                  <a href="?page=archive" class="text-blue-600 dark:text-blue-300 hover:text-blue-800 dark:hover:text-blue-100">
-                    <i class="fas fa-times mr-1"></i>Clear Filters
-                  </a>
-                </div>
-
-                <!-- Active Filters -->
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <?php if (!empty($_GET['search'])): ?>
-                    <span class="inline-flex items-center px-3 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded-full text-sm">
-                      Search: "<?= htmlspecialchars($_GET['search']) ?>"
-                    </span>
-                  <?php endif; ?>
-                  <?php if (!empty($_GET['language'])): ?>
-                    <span class="inline-flex items-center px-3 py-1 bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200 rounded-full text-sm">
-                      Language: <?= htmlspecialchars($_GET['language']) ?>
-                    </span>
-                  <?php endif; ?>
-                  <?php if (!empty($_GET['user'])): ?>
-                    <span class="inline-flex items-center px-3 py-1 bg-purple-100 dark:bg-purple-800 text-purple-800 dark:text-purple-200 rounded-full text-sm">
-                      Author: <?= htmlspecialchars($_GET['user']) ?>
-                    </span>
-                  <?php endif; ?>
-                  <?php if (!empty($_GET['tags'])): ?>
-                    <span class="inline-flex items-center px-3 py-1 bg-yellow-100 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-200 rounded-full text-sm">
-                      Tags: <?= htmlspecialchars($_GET['tags']) ?>
-                    </span>
-                  <?php endif; ?>
-                </div>
-              </div>
-              <?php endif; ?>
-
-              <div class="overflow-x-auto">
+<?php
+  $items_per_page = 5;
+  $count_stmt = $db->prepare("SELECT COUNT(*) as total FROM pastes WHERE is_public = 1 AND zero_knowledge = 0 AND (expire_time IS NULL OR expire_time > ?) AND parent_paste_id IS NULL");
+  $count_stmt->execute([time()]);
+  $total_count = $count_stmt->fetch()["total"];
+  $current_page = isset($_GET["p"]) ? max(1, intval($_GET["p"])) : 1;
+  $offset = ($current_page - 1) * $items_per_page;
+  $total_pages = ceil($total_count / $items_per_page);
+  $stmt = $db->prepare("SELECT p.*, u.username, (SELECT COUNT(*) FROM comments WHERE paste_id = p.id) as comment_count, COALESCE(p.fork_count, 0) as fork_count, CASE WHEN p.original_paste_id IS NOT NULL THEN 1 ELSE 0 END as is_fork, p.original_paste_id, p.parent_paste_id, (SELECT COUNT(*) FROM pastes WHERE parent_paste_id = p.id AND is_public = 1 AND zero_knowledge = 0) as child_count FROM pastes p LEFT JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 AND p.zero_knowledge = 0 AND (p.expire_time IS NULL OR p.expire_time > ?) AND p.parent_paste_id IS NULL ORDER BY p.created_at DESC LIMIT ? OFFSET ?");
+  $stmt->execute([time(), $items_per_page, $offset]);
+  $archive_pastes = $stmt->fetchAll();
+?>
+                <div class="overflow-x-auto">
                 <table class="w-full table-auto">
                   <thead>
                     <tr class="bg-gray-100 dark:bg-gray-700">
@@ -6312,11 +6056,8 @@ plt.show()</code></pre>
                     <?php if (empty($archive_pastes)): ?>
                       <tr>
                         <td colspan="6" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                          <i class="fas fa-search text-4xl mb-4"></i>
-                          <p class="text-lg">No pastes found matching your criteria.</p>
-                          <p class="text-sm">Try adjusting your search filters or 
-                            <a href="?page=archive" class="text-blue-500 hover:text-blue-700">clear all filters</a>
-                          </p>
+                          <i class="fas fa-archive text-4xl mb-4"></i>
+                          <p class="text-lg">No pastes found in the archive.</p>
                         </td>
                       </tr>
                     <?php else: ?>
@@ -6477,72 +6218,6 @@ plt.show()</code></pre>
               <script>
                 let loadedChildren = new Set();
 
-                // Toggle advanced filters
-                function toggleAdvancedFilters() {
-                  const filters = document.getElementById('advancedFilters');
-                  const button = event.target.closest('button');
-                  const icon = button.querySelector('i');
-
-                  filters.classList.toggle('hidden');
-                  if (filters.classList.contains('hidden')) {
-                    icon.className = 'fas fa-sliders-h';
-                  } else {
-                    icon.className = 'fas fa-times';
-                  }
-                }
-
-                // Enhanced search functionality
-                function quickFilter(type, value) {
-                  const form = document.getElementById('searchForm');
-
-                  if (type === 'date_range' && value === 'week') {
-                    const oneWeekAgo = new Date();
-                    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-                    document.querySelector('input[name="date_from"]').value = oneWeekAgo.toISOString().split('T')[0];
-                    document.querySelector('input[name="date_to"]').value = new Date().toISOString().split('T')[0];
-                    // Show advanced filters when date range is used
-                    document.getElementById('advancedFilters').classList.remove('hidden');
-                  } else {
-                    document.querySelector(`[name="${type}"]`).value = value;
-                  }
-
-                  form.submit();
-                }
-
-                // Auto-submit search form on sort change
-                document.querySelector('select[name="sort_by"]').addEventListener('change', function() {
-                  document.getElementById('searchForm').submit();
-                });
-
-                // Search suggestions for user input
-                const userInput = document.querySelector('input[name="user"]');
-                if (userInput) {
-                  let searchTimeout;
-                  userInput.addEventListener('input', function() {
-                    clearTimeout(searchTimeout);
-                    searchTimeout = setTimeout(() => {
-                      if (this.value.length >= 2) {
-                        fetch(`?action=search_users&term=${encodeURIComponent(this.value)}`)
-                          .then(response => response.json())
-                          .then(users => {
-                            // Simple autocomplete could be implemented here
-                            console.log('Found users:', users);
-                          })
-                          .catch(error => console.log('Search error:', error));
-                      }
-                    }, 300);
-                  });
-                }
-
-                // Real-time search (optional)
-                let realTimeSearchTimeout;
-                document.querySelector('input[name="search"]').addEventListener('input', function() {
-                  clearTimeout(realTimeSearchTimeout);
-                  realTimeSearchTimeout = setTimeout(() => {
-                    // Optional: implement real-time search
-                    // document.getElementById('searchForm').submit();
-                  }, 1000);
-                });
 
                 function toggleChildren(parentId) {
                   const childrenRow = document.getElementById(`children-${parentId}`);
